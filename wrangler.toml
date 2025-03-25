@@ -1,0 +1,9 @@
+name = "trade-worker"
+main = "src/index.js"
+compatibility_date = "2023-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Secrets to be added with wrangler:
+# wrangler secret put INTERNAL_SERVICE_KEY
+# wrangler secret put MEXC_API_KEY
+# wrangler secret put MEXC_API_SECRET

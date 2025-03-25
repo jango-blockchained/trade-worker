@@ -4,7 +4,7 @@ dist/
 .env
 .DS_Store
 # Ignore bun files
-bun.lockb
+bun.lock
 .bun/
 
 # Ignore bun files in all subdirectories

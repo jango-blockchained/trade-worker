@@ -3,3 +3,10 @@ node_modules/
 dist/
 .env
 .DS_Store
+# Ignore bun files
+bun.lockb
+.bun/
+
+# Ignore bun files in all subdirectories
+*/bun.lockb
+*/.bun/

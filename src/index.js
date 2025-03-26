@@ -2,6 +2,7 @@
 import { MexcClient } from './mexc-client.js';
 import { BinanceClient } from './binance-client.js';
 import { BybitClient } from './bybit-client.js';
+import { DbLogger } from './db-logger.js';
 
 // ES Module format requires a default export
 export default {
@@ -11,11 +12,15 @@ export default {
 };
 
 async function handleRequest(request, env) {
+  const startTime = Date.now();
+  const dbLogger = new DbLogger(env);
+  let requestId = null;
+
   // Verify internal service authentication
   const internalKey = request.headers.get('X-Internal-Key');
-  const requestId = request.headers.get('X-Request-ID');
+  const headerRequestId = request.headers.get('X-Request-ID');
 
-  if (!internalKey || internalKey !== env.INTERNAL_SERVICE_KEY || !requestId) {
+  if (!internalKey || internalKey !== env.INTERNAL_SERVICE_KEY || !headerRequestId) {
     return new Response(JSON.stringify({
       success: false,
       error: 'Unauthorized'
@@ -26,6 +31,9 @@ async function handleRequest(request, env) {
     // Process the trade request
     const data = await request.json();
     console.log('Received trade request:', JSON.stringify(data, null, 2));
+
+    // Log the request to database
+    requestId = await dbLogger.logRequest(request, data);
 
     const { exchange, action, symbol, quantity, price, orderType = 'MARKET', leverage = 20 } = data;
 
@@ -42,10 +50,12 @@ async function handleRequest(request, env) {
         client = new BybitClient(env.BYBIT_API_KEY, env.BYBIT_API_SECRET);
         break;
       default:
-        return new Response(JSON.stringify({
+        const response = new Response(JSON.stringify({
           success: false,
           error: 'Unsupported exchange'
         }), { status: 400 });
+        await dbLogger.logResponse(requestId, response, null, startTime);
+        return response;
     }
 
     // Map action to parameters
@@ -69,10 +79,12 @@ async function handleRequest(request, env) {
         reduceOnly = true;
         break;
       default:
-        return new Response(JSON.stringify({
+        const response = new Response(JSON.stringify({
           success: false,
           error: `Invalid action: ${action}`
         }), { status: 400 });
+        await dbLogger.logResponse(requestId, response, null, startTime);
+        return response;
     }
 
     // Set leverage if provided
@@ -106,18 +118,26 @@ async function handleRequest(request, env) {
 
     console.log('Trade result:', JSON.stringify(result, null, 2));
 
-    return new Response(JSON.stringify({
+    const response = new Response(JSON.stringify({
       success: true,
-      requestId,
+      requestId: headerRequestId,
       result
     }));
+
+    // Log the successful response
+    await dbLogger.logResponse(requestId, response, null, startTime);
+    return response;
 
   } catch (error) {
     console.error('Error processing trade request:', error);
 
-    return new Response(JSON.stringify({
+    const response = new Response(JSON.stringify({
       success: false,
       error: error.message || 'Unknown error occurred'
     }), { status: 500 });
+
+    // Log the error response
+    await dbLogger.logResponse(requestId, response, error, startTime);
+    return response;
   }
 }

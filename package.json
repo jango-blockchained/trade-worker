@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "Trade execution service for cryptocurrency exchanges",
   "main": "src/index.js",
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "init-db": "node scripts/init-db.js"
   },
   "dependencies": {
     "@binance/connector-typescript": "^0.3.16",

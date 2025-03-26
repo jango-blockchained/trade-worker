@@ -76,22 +76,31 @@ export class MexcClient {
       const timestamp = Date.now();
       const params = {
         symbol: symbol,
-        side: side,
-        type: orderType,
+        side: side.toUpperCase(),
+        positionMode: 'ONE_WAY', // Required for futures
+        openType: 'ISOLATED', // Required for futures
+        positionType: 2, // 1: Full position, 2: Part position
+        type: orderType === 'LIMIT' ? 1 : 2, // 1: Limit order, 2: Market order
         volume: quantity.toString(),
-        reduceOnly: reduceOnly.toString()
+        leverage: 20 // Default leverage
       };
 
       if (orderType === 'LIMIT' && price) {
         params.price = price.toString();
       }
 
+      // Log request parameters for debugging
+      console.log('Trade request params:', JSON.stringify(params, null, 2));
+
       const signature = await this.generateSignature(params, timestamp);
       const queryString = Object.entries(params)
-        .map(([key, value]) => `${key}=${value}`)
+        .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
         .join('&');
 
-      const response = await fetch(`${this.baseUrl}/api/v1/private/order/submit?${queryString}&timestamp=${timestamp}&signature=${signature}`, {
+      const url = `${this.baseUrl}/api/v1/private/order/submit?${queryString}&timestamp=${timestamp}&signature=${signature}`;
+      console.log('Request URL:', url);
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -99,13 +108,16 @@ export class MexcClient {
         }
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.msg || 'Order execution failed');
+      const responseData = await response.json();
+      console.log('MEXC API Response:', JSON.stringify(responseData, null, 2));
+
+      if (!response.ok || responseData.code !== 200) {
+        throw new Error(responseData.msg || JSON.stringify(responseData));
       }
 
-      return await response.json();
+      return responseData.data;
     } catch (error) {
+      console.error('Trade execution error:', error);
       throw new Error(`Order execution failed: ${error.message}`);
     }
   }

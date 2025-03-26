@@ -25,8 +25,9 @@ async function handleRequest(request, env) {
   try {
     // Process the trade request
     const data = await request.json();
+    console.log('Received trade request:', JSON.stringify(data, null, 2));
 
-    const { exchange, action, symbol, quantity, price, orderType = 'MARKET', leverage } = data;
+    const { exchange, action, symbol, quantity, price, orderType = 'MARKET', leverage = 20 } = data;
 
     // Initialize the appropriate exchange client
     let client;
@@ -76,11 +77,12 @@ async function handleRequest(request, env) {
 
     // Set leverage if provided
     if (leverage) {
+      console.log(`Setting leverage for ${symbol} to ${leverage}`);
       await client.setLeverage(symbol, leverage);
     }
 
-    // Execute the trade
-    const result = await client.executeTrade({
+    // Prepare trade parameters
+    const tradeParams = {
       symbol,
       side,
       orderType,
@@ -88,7 +90,21 @@ async function handleRequest(request, env) {
       price,
       reduceOnly,
       leverage
-    });
+    };
+
+    // Add exchange-specific parameters
+    if (exchange.toLowerCase() === 'mexc') {
+      tradeParams.positionMode = 'ONE_WAY';
+      tradeParams.openType = 'ISOLATED';
+      tradeParams.positionType = 2;
+    }
+
+    console.log('Executing trade with params:', JSON.stringify(tradeParams, null, 2));
+
+    // Execute the trade
+    const result = await client.executeTrade(tradeParams);
+
+    console.log('Trade result:', JSON.stringify(result, null, 2));
 
     return new Response(JSON.stringify({
       success: true,

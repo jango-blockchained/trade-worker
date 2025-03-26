@@ -7,8 +7,11 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@binance/connector-typescript": "^0.3.16",
+    "bybit-api": "^4.0.1"
+  },
   "devDependencies": {
-    "wrangler": "^3.19.0"
+    "wrangler": "^4.4.0"
   }
 }

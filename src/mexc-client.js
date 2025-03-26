@@ -1,144 +1,169 @@
 // trade-worker/src/mexc-client.js - MEXC API client implementation
-import { createHmac } from 'node:crypto';
-
 export class MexcClient {
   constructor(apiKey, apiSecret) {
     this.apiKey = apiKey;
     this.apiSecret = apiSecret;
-    this.baseUrl = 'https://api.mexc.com';
+    this.baseUrl = 'https://contract.mexc.com';
   }
 
   // Generate signature for authenticated requests
-  generateSignature(params, timestamp) {
+  async generateSignature(params, timestamp) {
     const queryString = Object.keys(params)
       .sort()
       .map(key => `${key}=${params[key]}`)
       .join('&');
-    
+
     const signaturePayload = `${queryString}&timestamp=${timestamp}`;
-    return createHmac('sha256', this.apiSecret)
-      .update(signaturePayload)
-      .digest('hex');
+
+    // Use WebCrypto API instead of Node's crypto
+    const encoder = new TextEncoder();
+    const key = encoder.encode(this.apiSecret);
+    const message = encoder.encode(signaturePayload);
+
+    return crypto.subtle.importKey(
+      'raw',
+      key,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    ).then(key => crypto.subtle.sign(
+      'HMAC',
+      key,
+      message
+    )).then(signature => {
+      return Array.from(new Uint8Array(signature))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    });
   }
 
   // Set leverage for a symbol
   async setLeverage(symbol, leverage) {
-    const timestamp = Date.now();
-    const params = {
-      symbol: symbol,
-      leverage: leverage
-    };
-    
-    const signature = this.generateSignature(params, timestamp);
-    
-    const response = await fetch(`${this.baseUrl}/api/v3/leverage`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-MEXC-APIKEY': this.apiKey
-      },
-      body: JSON.stringify({
-        ...params,
-        timestamp,
-        signature
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Failed to set leverage: ${JSON.stringify(error)}`);
+    try {
+      const timestamp = Date.now();
+      const params = {
+        symbol: symbol,
+        leverage: leverage
+      };
+
+      const signature = await this.generateSignature(params, timestamp);
+      const queryString = Object.entries(params)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('&');
+
+      const response = await fetch(`${this.baseUrl}/api/v1/private/position/change-leverage?${queryString}&timestamp=${timestamp}&signature=${signature}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-MEXC-APIKEY': this.apiKey
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.msg || 'Failed to set leverage');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(`Failed to set leverage: ${error.message}`);
     }
-    
-    return response.json();
   }
 
   // Execute a trade
-  async executeTrade({ symbol, side, orderType, quantity, price, reduceOnly, leverage }) {
-    const timestamp = Date.now();
-    const params = {
-      symbol: symbol,
-      side: side,
-      type: orderType,
-      quantity: quantity.toString(),
-      reduceOnly: reduceOnly.toString()
-    };
-    
-    // Add price for limit orders
-    if (orderType === 'LIMIT' && price) {
-      params.price = price.toString();
+  async executeTrade({ symbol, side, orderType, quantity, price, reduceOnly }) {
+    try {
+      const timestamp = Date.now();
+      const params = {
+        symbol: symbol,
+        side: side,
+        type: orderType,
+        volume: quantity.toString(),
+        reduceOnly: reduceOnly.toString()
+      };
+
+      if (orderType === 'LIMIT' && price) {
+        params.price = price.toString();
+      }
+
+      const signature = await this.generateSignature(params, timestamp);
+      const queryString = Object.entries(params)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('&');
+
+      const response = await fetch(`${this.baseUrl}/api/v1/private/order/submit?${queryString}&timestamp=${timestamp}&signature=${signature}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-MEXC-APIKEY': this.apiKey
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.msg || 'Order execution failed');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(`Order execution failed: ${error.message}`);
     }
-    
-    const signature = this.generateSignature(params, timestamp);
-    
-    const response = await fetch(`${this.baseUrl}/api/v3/order`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-MEXC-APIKEY': this.apiKey
-      },
-      body: JSON.stringify({
-        ...params,
-        timestamp,
-        signature
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Order execution failed: ${JSON.stringify(error)}`);
-    }
-    
-    return response.json();
   }
 
   // Get account information
   async getAccountInfo() {
-    const timestamp = Date.now();
-    const params = {};
-    
-    const signature = this.generateSignature(params, timestamp);
-    
-    const response = await fetch(`${this.baseUrl}/api/v3/account?timestamp=${timestamp}&signature=${signature}`, {
-      method: 'GET',
-      headers: {
-        'X-MEXC-APIKEY': this.apiKey
+    try {
+      const timestamp = Date.now();
+      const params = {};
+
+      const signature = await this.generateSignature(params, timestamp);
+
+      const response = await fetch(`${this.baseUrl}/api/v1/private/account/assets?timestamp=${timestamp}&signature=${signature}`, {
+        method: 'GET',
+        headers: {
+          'X-MEXC-APIKEY': this.apiKey
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.msg || 'Failed to get account info');
       }
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Failed to get account info: ${JSON.stringify(error)}`);
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(`Failed to get account info: ${error.message}`);
     }
-    
-    return response.json();
   }
 
   // Get positions
   async getPositions(symbol = null) {
-    const timestamp = Date.now();
-    const params = {};
-    
-    if (symbol) {
-      params.symbol = symbol;
-    }
-    
-    const signature = this.generateSignature(params, timestamp);
-    
-    const queryString = symbol ? `symbol=${symbol}&` : '';
-    const url = `${this.baseUrl}/api/v3/positionRisk?${queryString}timestamp=${timestamp}&signature=${signature}`;
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'X-MEXC-APIKEY': this.apiKey
+    try {
+      const timestamp = Date.now();
+      const params = {};
+
+      if (symbol) {
+        params.symbol = symbol;
       }
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Failed to get positions: ${JSON.stringify(error)}`);
+
+      const signature = await this.generateSignature(params, timestamp);
+      const queryString = symbol ? `symbol=${symbol}&` : '';
+
+      const response = await fetch(`${this.baseUrl}/api/v1/private/position/list?${queryString}timestamp=${timestamp}&signature=${signature}`, {
+        method: 'GET',
+        headers: {
+          'X-MEXC-APIKEY': this.apiKey
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.msg || 'Failed to get positions');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(`Failed to get positions: ${error.message}`);
     }
-    
-    return response.json();
   }
 }

@@ -11,6 +11,52 @@ export default {
   }
 };
 
+// Add validation functions
+async function validateApiCredentials(exchange, env) {
+  switch (exchange.toLowerCase()) {
+    case 'mexc':
+      return env.MEXC_API_KEY && env.MEXC_API_SECRET;
+    case 'binance':
+      return env.BINANCE_API_KEY && env.BINANCE_API_SECRET;
+    case 'bybit':
+      return env.BYBIT_API_KEY && env.BYBIT_API_SECRET;
+    default:
+      return false;
+  }
+}
+
+async function validateRequest(data) {
+  const { exchange, action, symbol, quantity } = data;
+
+  if (!exchange || !action || !symbol || !quantity) {
+    return { isValid: false, error: 'Missing required fields' };
+  }
+
+  // Validate action
+  const validActions = ['LONG', 'SHORT', 'CLOSE_LONG', 'CLOSE_SHORT'];
+  if (!validActions.includes(action.toUpperCase())) {
+    return { isValid: false, error: `Invalid action: ${action}` };
+  }
+
+  // Validate quantity
+  if (isNaN(quantity) || quantity <= 0) {
+    return { isValid: false, error: 'Invalid quantity' };
+  }
+
+  return { isValid: true };
+}
+
+async function testApiConnection(client) {
+  try {
+    // Try to get account info as a test
+    await client.getAccountInfo();
+    return true;
+  } catch (error) {
+    console.error('API connection test failed:', error);
+    return false;
+  }
+}
+
 async function handleRequest(request, env) {
   const startTime = Date.now();
   const dbLogger = new DbLogger(env);
@@ -35,7 +81,28 @@ async function handleRequest(request, env) {
     // Log the request to database
     requestId = await dbLogger.logRequest(request, data);
 
+    // Validate request data
+    const validation = await validateRequest(data);
+    if (!validation.isValid) {
+      const response = new Response(JSON.stringify({
+        success: false,
+        error: validation.error
+      }), { status: 400 });
+      await dbLogger.logResponse(requestId, response, null, startTime);
+      return response;
+    }
+
     const { exchange, action, symbol, quantity, price, orderType = 'MARKET', leverage = 20 } = data;
+
+    // Validate API credentials
+    if (!await validateApiCredentials(exchange, env)) {
+      const response = new Response(JSON.stringify({
+        success: false,
+        error: `Missing API credentials for ${exchange}`
+      }), { status: 400 });
+      await dbLogger.logResponse(requestId, response, null, startTime);
+      return response;
+    }
 
     // Initialize the appropriate exchange client
     let client;
@@ -56,6 +123,16 @@ async function handleRequest(request, env) {
         }), { status: 400 });
         await dbLogger.logResponse(requestId, response, null, startTime);
         return response;
+    }
+
+    // Test API connection
+    if (!await testApiConnection(client)) {
+      const response = new Response(JSON.stringify({
+        success: false,
+        error: 'Failed to connect to exchange API'
+      }), { status: 500 });
+      await dbLogger.logResponse(requestId, response, null, startTime);
+      return response;
     }
 
     // Map action to parameters

@@ -18,7 +18,8 @@ export class DbLogger {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.env.INTERNAL_SERVICE_KEY}`
+                    'X-Internal-Key': this.env.INTERNAL_SERVICE_KEY,
+                    'X-Request-ID': crypto.randomUUID()
                 },
                 body: JSON.stringify({
                     query: `INSERT INTO trade_requests 
@@ -41,7 +42,7 @@ export class DbLogger {
             }
 
             const result = await response.json();
-            return result.lastRowId;
+            return result.success ? result.lastRowId : null;
         } catch (error) {
             console.error('Error logging request:', error);
             return null;
@@ -60,7 +61,8 @@ export class DbLogger {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.env.INTERNAL_SERVICE_KEY}`
+                    'X-Internal-Key': this.env.INTERNAL_SERVICE_KEY,
+                    'X-Request-ID': crypto.randomUUID()
                 },
                 body: JSON.stringify({
                     query: `INSERT INTO trade_responses 

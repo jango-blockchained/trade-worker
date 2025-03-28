@@ -11,3 +11,4 @@ bun.lockb
 # Ignore bun files in all subdirectories
 */bun.lockb
 */.bun/
+.dev.vars

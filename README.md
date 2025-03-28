@@ -2,6 +2,8 @@
 
 A Cloudflare Worker service for executing cryptocurrency trades across multiple exchanges. This worker handles trade execution requests and provides a unified interface for different cryptocurrency exchanges.
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yourusername/grid-trading/tree/main/trade-worker)
+
 ## Features
 
 - Multi-exchange support (Binance, MEXC, Bybit)
@@ -49,15 +51,10 @@ wrangler secret put BYBIT_API_KEY
 wrangler secret put BYBIT_API_SECRET
 ```
 
-4. Update the D1 worker URL in `wrangler.toml` if using database logging:
+4. Update the D1 worker URL in `wrangler.toml` for production:
 ```toml
 [vars]
 D1_WORKER_URL = "https://your-d1-worker.workers.dev"
-```
-
-5. Initialize the database (if using D1 logging):
-```bash
-bun run init-db
 ```
 
 ## Development
@@ -71,12 +68,6 @@ bun run dev -- --port 8788
 ```
 
 The worker uses environment variables from `.dev.vars` during local development instead of the values in `wrangler.toml` or Cloudflare secrets.
-
-For inter-worker communication during development, update the `D1_WORKER_URL` in your `.dev.vars` to point to the local D1 worker:
-
-```
-D1_WORKER_URL=http://localhost:8787
-```
 
 ### Production Deployment
 
@@ -101,7 +92,6 @@ X-Request-ID: unique_request_id
   "symbol": "BTCUSDT",
   "quantity": 0.001,
   "price": 65000,
-  "orderType": "LIMIT",
   "leverage": 20
 }
 ```
@@ -113,9 +103,9 @@ X-Request-ID: unique_request_id
 - `CLOSE_SHORT`: Close a short position
 
 #### Supported Exchanges
-- Binance
-- MEXC
-- Bybit
+- Binance (`binance`)
+- MEXC (`mexc`)
+- Bybit (`bybit`)
 
 #### Response Format
 
@@ -138,25 +128,34 @@ Error:
 }
 ```
 
+## Exchange Clients
+
+The worker includes dedicated client implementations for each supported exchange:
+- `binance-client.js` - Binance Futures API integration
+- `mexc-client.js` - MEXC Futures API integration
+- `bybit-client.js` - Bybit Futures API integration
+
+Each client handles exchange-specific API requirements, authentication, and trade execution.
+
 ## Database Logging
 
-If enabled, the worker logs all requests and responses to a D1 database. The logging system tracks:
+When enabled, the worker logs all requests and responses to a D1 database through the D1 Worker. The logging system tracks:
 - Request details (method, path, headers, body)
 - Response information (status, headers, body)
 - Error data
 - Execution timing
-- Source IP and user agent
 
 ## Security
 
 - All requests must include a valid `X-Internal-Key` header
+- All requests must include a unique `X-Request-ID` header
 - API keys are stored securely using Cloudflare Workers Secrets
 - Request validation and sanitization
 - Error messages don't expose sensitive information
 
 ## Error Handling
 
-The worker includes comprehensive error handling for:
+The worker includes error handling for:
 - Authentication failures
 - Invalid request parameters
 - Exchange API errors

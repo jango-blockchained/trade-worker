@@ -7,13 +7,19 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "init-db": "node scripts/init-db.js"
+    "init-db": "node scripts/init-db.js",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage"
   },
   "dependencies": {
     "@binance/connector-typescript": "^0.3.16",
     "bybit-api": "^4.0.1"
   },
   "devDependencies": {
-    "wrangler": "^4.4.0"
+    "wrangler": "^4.4.0",
+    "bun-types": "latest",
+    "@types/jest": "^29.5.12",
+    "jest-mock": "^29.7.0"
   }
 }

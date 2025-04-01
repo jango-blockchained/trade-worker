@@ -2,7 +2,7 @@
 
 A Cloudflare Worker service for executing cryptocurrency trades across multiple exchanges. This worker handles trade execution requests and provides a unified interface for different cryptocurrency exchanges.
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yourusername/grid-trading/tree/main/workers/trade-worker)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yourusername/hoox-trading/tree/main/workers/trade-worker)
 
 ## Features
 

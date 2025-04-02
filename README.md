@@ -40,7 +40,14 @@ BYBIT_API_SECRET=your_bybit_secret
 D1_WORKER_URL=http://localhost:8787
 ```
 
-3. Configure production secrets using wrangler:
+3. Set your Cloudflare account ID in `wrangler.toml`:
+```toml
+name = "trade-worker"
+account_id = "your_account_id_here"
+main = "src/index.js"
+```
+
+4. Configure production secrets using wrangler:
 ```bash
 wrangler secret put INTERNAL_SERVICE_KEY
 wrangler secret put MEXC_API_KEY
@@ -51,7 +58,7 @@ wrangler secret put BYBIT_API_KEY
 wrangler secret put BYBIT_API_SECRET
 ```
 
-4. Update the D1 worker URL in `wrangler.toml` for production:
+5. Update the D1 worker URL in `wrangler.toml` for production:
 ```toml
 [vars]
 D1_WORKER_URL = "https://your-d1-worker.workers.dev"

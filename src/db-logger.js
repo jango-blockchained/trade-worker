@@ -3,83 +3,83 @@
  */
 
 export class DbLogger {
-    constructor(env) {
-        this.env = env;
-        this.d1WorkerUrl = env.D1_WORKER_URL || 'http://127.0.0.1:8787';
-        this.enabled = !!env.D1_WORKER_URL && !!env.INTERNAL_SERVICE_KEY;
-    }
+  constructor(env) {
+    this.env = env;
+    this.d1WorkerUrl = env.D1_WORKER_URL || "http://127.0.0.1:8787";
+    this.enabled = !!env.D1_WORKER_URL && !!env.INTERNAL_SERVICE_KEY;
+  }
 
-    async logRequest(request, requestBody) {
-        if (!this.enabled) return null;
+  async logRequest(request, requestBody) {
+    if (!this.enabled) return null;
 
-        try {
-            const headers = Object.fromEntries(request.headers.entries());
-            const response = await fetch(`${this.d1WorkerUrl}/query`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Internal-Key': this.env.INTERNAL_SERVICE_KEY,
-                    'X-Request-ID': crypto.randomUUID()
-                },
-                body: JSON.stringify({
-                    query: `INSERT INTO trade_requests 
+    try {
+      const headers = Object.fromEntries(request.headers.entries());
+      const response = await fetch(`${this.d1WorkerUrl}/query`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Key": this.env.INTERNAL_SERVICE_KEY,
+          "X-Request-ID": crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          query: `INSERT INTO trade_requests 
                            (method, path, headers, body, source_ip, user_agent) 
                            VALUES (?, ?, ?, ?, ?, ?)`,
-                    params: [
-                        request.method,
-                        new URL(request.url).pathname,
-                        JSON.stringify(headers),
-                        JSON.stringify(requestBody),
-                        request.headers.get('cf-connecting-ip'),
-                        request.headers.get('user-agent')
-                    ]
-                })
-            });
+          params: [
+            request.method,
+            new URL(request.url).pathname,
+            JSON.stringify(headers),
+            JSON.stringify(requestBody),
+            request.headers.get("cf-connecting-ip"),
+            request.headers.get("user-agent"),
+          ],
+        }),
+      });
 
-            if (!response.ok) {
-                console.error('Failed to log request:', await response.text());
-                return null;
-            }
+      if (!response.ok) {
+        console.error("Failed to log request:", await response.text());
+        return null;
+      }
 
-            const result = await response.json();
-            return result.success ? result.lastRowId : null;
-        } catch (error) {
-            console.error('Error logging request:', error);
-            return null;
-        }
+      const result = await response.json();
+      return result.success ? result.lastRowId : null;
+    } catch (error) {
+      console.error("Error logging request:", error);
+      return null;
     }
+  }
 
-    async logResponse(requestId, response, error = null, startTime) {
-        if (!this.enabled || !requestId) return;
+  async logResponse(requestId, response, error = null, startTime) {
+    if (!this.enabled || !requestId) return;
 
-        try {
-            const executionTime = Date.now() - startTime;
-            const headers = Object.fromEntries(response.headers.entries());
-            const body = await response.clone().text();
+    try {
+      const executionTime = Date.now() - startTime;
+      const headers = Object.fromEntries(response.headers.entries());
+      const body = await response.clone().text();
 
-            await fetch(`${this.d1WorkerUrl}/query`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Internal-Key': this.env.INTERNAL_SERVICE_KEY,
-                    'X-Request-ID': crypto.randomUUID()
-                },
-                body: JSON.stringify({
-                    query: `INSERT INTO trade_responses 
+      await fetch(`${this.d1WorkerUrl}/query`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Key": this.env.INTERNAL_SERVICE_KEY,
+          "X-Request-ID": crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          query: `INSERT INTO trade_responses 
                            (request_id, status_code, headers, body, error, execution_time_ms) 
                            VALUES (?, ?, ?, ?, ?, ?)`,
-                    params: [
-                        requestId,
-                        response.status,
-                        JSON.stringify(headers),
-                        body,
-                        error ? error.toString() : null,
-                        executionTime
-                    ]
-                })
-            });
-        } catch (error) {
-            console.error('Error logging response:', error);
-        }
+          params: [
+            requestId,
+            response.status,
+            JSON.stringify(headers),
+            body,
+            error ? error.toString() : null,
+            executionTime,
+          ],
+        }),
+      });
+    } catch (error) {
+      console.error("Error logging response:", error);
     }
-} 
+  }
+}

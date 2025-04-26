@@ -24,11 +24,13 @@ A Cloudflare Worker service for executing cryptocurrency trades across multiple 
 ## Setup
 
 1. Install dependencies:
+
 ```bash
 bun install
 ```
 
 2. Configure environment variables in `.dev.vars` for local development:
+
 ```env
 INTERNAL_SERVICE_KEY=your_internal_key
 MEXC_API_KEY=your_mexc_key
@@ -41,6 +43,7 @@ D1_WORKER_URL=http://localhost:8787
 ```
 
 3. Set your Cloudflare account ID in `wrangler.toml`:
+
 ```toml
 name = "trade-worker"
 account_id = "your_account_id_here"
@@ -48,6 +51,7 @@ main = "src/index.js"
 ```
 
 4. Configure production secrets using wrangler:
+
 ```bash
 wrangler secret put INTERNAL_SERVICE_KEY
 wrangler secret put MEXC_API_KEY
@@ -59,6 +63,7 @@ wrangler secret put BYBIT_API_SECRET
 ```
 
 5. Update the D1 worker URL in `wrangler.toml` for production:
+
 ```toml
 [vars]
 D1_WORKER_URL = "https://your-d1-worker.workers.dev"
@@ -79,6 +84,7 @@ The worker uses environment variables from `.dev.vars` during local development 
 ### Production Deployment
 
 Deploy to production:
+
 ```bash
 bun run deploy
 ```
@@ -104,12 +110,14 @@ X-Request-ID: unique_request_id
 ```
 
 #### Supported Actions
+
 - `LONG`: Open a long position
 - `SHORT`: Open a short position
 - `CLOSE_LONG`: Close a long position
 - `CLOSE_SHORT`: Close a short position
 
 #### Supported Exchanges
+
 - Binance (`binance`)
 - MEXC (`mexc`)
 - Bybit (`bybit`)
@@ -117,6 +125,7 @@ X-Request-ID: unique_request_id
 #### Response Format
 
 Success:
+
 ```json
 {
   "success": true,
@@ -128,6 +137,7 @@ Success:
 ```
 
 Error:
+
 ```json
 {
   "success": false,
@@ -138,6 +148,7 @@ Error:
 ## Exchange Clients
 
 The worker includes dedicated client implementations for each supported exchange:
+
 - `binance-client.js` - Binance Futures API integration
 - `mexc-client.js` - MEXC Futures API integration
 - `bybit-client.js` - Bybit Futures API integration
@@ -147,6 +158,7 @@ Each client handles exchange-specific API requirements, authentication, and trad
 ## Database Logging
 
 When enabled, the worker logs all requests and responses to a D1 database through the D1 Worker. The logging system tracks:
+
 - Request details (method, path, headers, body)
 - Response information (status, headers, body)
 - Error data
@@ -163,6 +175,7 @@ When enabled, the worker logs all requests and responses to a D1 database throug
 ## Error Handling
 
 The worker includes error handling for:
+
 - Authentication failures
 - Invalid request parameters
 - Exchange API errors
@@ -175,4 +188,4 @@ The worker includes error handling for:
 2. Create your feature branch
 3. Commit your changes
 4. Push to the branch
-5. Create a new Pull Request 
+5. Create a new Pull Request

@@ -1,149 +1,103 @@
 # Trade Worker
 
-A Cloudflare Worker service for executing cryptocurrency trades across multiple exchanges. This worker handles trade execution requests and provides a unified interface for different cryptocurrency exchanges.
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yourusername/hoox-trading/tree/main/workers/trade-worker)
+A Cloudflare Worker service for executing cryptocurrency trades across multiple exchanges. This worker accepts requests via a standardized `/process` endpoint from the `webhook-receiver`.
 
 ## Features
 
-- Multi-exchange support (Binance, MEXC, Bybit)
-- Secure authentication with internal service key
-- Request/Response logging with D1 database integration
-- Leverage configuration
-- Position management (Long/Short positions)
-- Error handling and logging
+- Multi-exchange support (Binance, MEXC, Bybit).
+- Secure authentication via shared internal key with `webhook-receiver`.
+- Request/Response logging with D1 database integration (via `D1_WORKER_URL`).
+- Leverage configuration.
+- Position management (Long/Short positions).
+- Error handling and logging.
 
 ## Prerequisites
 
 - Node.js >= 16
-- Bun (for package management)
+- Bun (or npm/yarn)
 - Wrangler CLI
 - Cloudflare Workers account
-- API keys for supported exchanges
+- API keys for desired exchanges (MEXC, Binance, Bybit).
 
 ## Setup
 
-1. Install dependencies:
-
-```bash
-bun install
-```
-
-2. Configure environment variables in `.dev.vars` for local development:
-
-```env
-INTERNAL_SERVICE_KEY=your_internal_key
-MEXC_API_KEY=your_mexc_key
-MEXC_API_SECRET=your_mexc_secret
-BINANCE_API_KEY=your_binance_key
-BINANCE_API_SECRET=your_binance_secret
-BYBIT_API_KEY=your_bybit_key
-BYBIT_API_SECRET=your_bybit_secret
-D1_WORKER_URL=http://localhost:8787
-```
-
-3. Set your Cloudflare account ID in `wrangler.toml`:
-
-```toml
-name = "trade-worker"
-account_id = "your_account_id_here"
-main = "src/index.js"
-```
-
-4. Configure production secrets using wrangler:
-
-```bash
-wrangler secret put INTERNAL_SERVICE_KEY
-wrangler secret put MEXC_API_KEY
-wrangler secret put MEXC_API_SECRET
-wrangler secret put BINANCE_API_KEY
-wrangler secret put BINANCE_API_SECRET
-wrangler secret put BYBIT_API_KEY
-wrangler secret put BYBIT_API_SECRET
-```
-
-5. Update the D1 worker URL in `wrangler.toml` for production:
-
-```toml
-[vars]
-D1_WORKER_URL = "https://your-d1-worker.workers.dev"
-```
+1.  Install dependencies:
+    ```bash
+    bun install
+    ```
+2.  Set your Cloudflare account ID in `wrangler.toml`.
+3.  Configure the `D1_WORKER_URL` in `wrangler.toml` (`vars` section) to point to your deployed D1 worker.
+4.  Configure Secrets (via Cloudflare dashboard Secrets Store or `wrangler secret put`):
+    *   `WEBHOOK_INTERNAL_KEY`: The **shared** secret key used for authentication with the `webhook-receiver`. Bind this to `INTERNAL_KEY_BINDING` in `wrangler.toml`.
+    *   `MEXC_API_KEY`, `MEXC_API_SECRET`: If using MEXC. Bind to `MEXC_KEY_BINDING`, `MEXC_SECRET_BINDING`.
+    *   `BINANCE_API_KEY`, `BINANCE_API_SECRET`: If using Binance. Bind to `BINANCE_KEY_BINDING`, `BINANCE_SECRET_BINDING`.
+    *   `BYBIT_API_KEY`, `BYBIT_API_SECRET`: If using Bybit. Bind to `BYBIT_KEY_BINDING`, `BYBIT_SECRET_BINDING`.
+5.  For local development, create a `.dev.vars` file and define the URLs and secrets:
+    ```.dev.vars
+    D1_WORKER_URL="http://localhost:<d1_worker_port>"
+    # Mock secret bindings for local dev:
+    INTERNAL_KEY_BINDING="your_shared_internal_secret"
+    MEXC_KEY_BINDING="your_mexc_key"
+    MEXC_SECRET_BINDING="your_mexc_secret"
+    # ... (add other exchange keys/secrets as needed)
+    ```
 
 ## Development
 
-### Local Development
-
-For local development, this worker should run on port 8788:
-
+Run locally (e.g., on port 8788):
 ```bash
-bun run dev -- --port 8788
+bun run dev --port 8788
 ```
 
-The worker uses environment variables from `.dev.vars` during local development instead of the values in `wrangler.toml` or Cloudflare secrets.
-
-### Production Deployment
-
-Deploy to production:
-
+Deploy:
 ```bash
 bun run deploy
 ```
 
-## API Usage
+## API Interface
 
-### Execute Trade
+This worker **only** accepts requests from the `webhook-receiver` (or another authenticated internal service) on the `/process` endpoint.
 
-```http
-POST /
-Content-Type: application/json
-X-Internal-Key: your_internal_key
-X-Request-ID: unique_request_id
-
-{
-  "exchange": "binance",
-  "action": "LONG",
-  "symbol": "BTCUSDT",
-  "quantity": 0.001,
-  "price": 65000,
-  "leverage": 20
-}
-```
-
-#### Supported Actions
-
-- `LONG`: Open a long position
-- `SHORT`: Open a short position
-- `CLOSE_LONG`: Close a long position
-- `CLOSE_SHORT`: Close a short position
-
-#### Supported Exchanges
-
-- Binance (`binance`)
-- MEXC (`mexc`)
-- Bybit (`bybit`)
-
-#### Response Format
-
-Success:
-
-```json
-{
-  "success": true,
-  "requestId": "unique_request_id",
-  "result": {
-    // Exchange-specific order details
+- **Method:** `POST`
+- **Endpoint:** `/process`
+- **Content-Type:** `application/json`
+- **Expected Request Body:**
+  ```json
+  {
+    "requestId": "<uuid_from_receiver>",
+    "internalAuthKey": "YOUR_INTERNAL_SHARED_SECRET", // Validated against INTERNAL_KEY_BINDING
+    "payload": {
+      // --- Trade-specific payload fields below ---
+      "exchange": "binance",       // Required (e.g., "mexc", "binance", "bybit")
+      "action": "LONG",            // Required (e.g., "LONG", "SHORT", "CLOSE_LONG", "CLOSE_SHORT")
+      "symbol": "BTCUSDT",         // Required (Exchange-specific symbol format)
+      "quantity": 0.001,          // Required (Positive number)
+      "price": 65000,             // Optional (for LIMIT orders)
+      "orderType": "MARKET",        // Optional (Defaults to "MARKET", use "LIMIT" with price)
+      "leverage": 20                // Optional (Defaults to 20)
+    }
   }
-}
-```
+  ```
 
-Error:
+- **Response Format:**
 
-```json
-{
-  "success": false,
-  "error": "Error message"
-}
-```
+  **Success:**
+  ```json
+  {
+    "success": true,
+    "result": { /* Exchange-specific order details from executeTrade */ },
+    "error": null
+  }
+  ```
+
+  **Error:**
+  ```json
+  {
+    "success": false,
+    "result": null,
+    "error": "<Error message describing the failure (e.g., Authentication failed, Invalid quantity, Trade execution failed: ...)>"
+  }
+  ```
 
 ## Exchange Clients
 
@@ -157,20 +111,14 @@ Each client handles exchange-specific API requirements, authentication, and trad
 
 ## Database Logging
 
-When enabled, the worker logs all requests and responses to a D1 database through the D1 Worker. The logging system tracks:
-
-- Request details (method, path, headers, body)
-- Response information (status, headers, body)
-- Error data
-- Execution timing
+The worker logs incoming requests and outgoing responses (including errors) to a D1 database via the configured `D1_WORKER_URL`. The log includes the `requestId` from the incoming request.
 
 ## Security
 
-- All requests must include a valid `X-Internal-Key` header
-- All requests must include a unique `X-Request-ID` header
-- API keys are stored securely using Cloudflare Workers Secrets
-- Request validation and sanitization
-- Error messages don't expose sensitive information
+- All requests *must* be received on the `/process` endpoint.
+- Requests *must* include a valid `internalAuthKey` in the body, matching the `WEBHOOK_INTERNAL_KEY` secret.
+- Exchange API keys/secrets are stored securely using Cloudflare Workers Secrets.
+- Validates the trade parameters within the `payload`.
 
 ## Error Handling
 

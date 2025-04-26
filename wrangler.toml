@@ -12,7 +12,7 @@ D1_WORKER_URL = "https://d1-worker.cryptolinx.workers.dev"
 
 # Secrets managed via Cloudflare Secrets Store
 secrets_store_secrets = [
-  { binding = "INTERNAL_KEY_BINDING", store_id = "<YOUR_STORE_ID>", secret_name = "TRADE_INTERNAL_KEY" },
+  { binding = "INTERNAL_KEY_BINDING", store_id = "<YOUR_STORE_ID>", secret_name = "WEBHOOK_INTERNAL_KEY" },
   { binding = "MEXC_KEY_BINDING",     store_id = "<YOUR_STORE_ID>", secret_name = "MEXC_API_KEY" },
   { binding = "MEXC_SECRET_BINDING",  store_id = "<YOUR_STORE_ID>", secret_name = "MEXC_API_SECRET" },
   { binding = "BINANCE_KEY_BINDING",  store_id = "<YOUR_STORE_ID>", secret_name = "BINANCE_API_KEY" },

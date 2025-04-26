@@ -195,28 +195,32 @@ async function handleRequest(request, env) {
     let apiSecret = null;
 
     switch (exchange.toLowerCase()) {
-      case "mexc":
+      case "mexc": {
         // Use optional chaining and nullish coalescing, though validate passed
         apiKey = (await env.MEXC_KEY_BINDING?.get()) ?? null;
         apiSecret = (await env.MEXC_SECRET_BINDING?.get()) ?? null;
         break;
-      case "binance":
+      }
+      case "binance": {
         apiKey = (await env.BINANCE_KEY_BINDING?.get()) ?? null;
         apiSecret = (await env.BINANCE_SECRET_BINDING?.get()) ?? null;
         break;
-      case "bybit":
+      }
+      case "bybit": {
         apiKey = (await env.BYBIT_KEY_BINDING?.get()) ?? null;
         apiSecret = (await env.BYBIT_SECRET_BINDING?.get()) ?? null;
         break;
-      default:
-        // This case should ideally not be reached if validateRequest is comprehensive
+      }
+      default: {
         // but handle defensively.
+        // This case should ideally not be reached if validateRequest is comprehensive
         const response = new Response(
           JSON.stringify({ success: false, error: "Unsupported exchange" }),
           { status: 400 }
         );
         await dbLogger.logResponse(requestId, response, null, startTime);
         return response;
+      }
     }
 
     // Check if secrets were actually retrieved
@@ -238,19 +242,22 @@ async function handleRequest(request, env) {
     // Use provided mock client class if available, otherwise use real one
     let client;
     switch (exchange.toLowerCase()) {
-      case "mexc":
+      case "mexc": {
         const MexcClientClass = env.__mocks__?.MexcClient || MexcClient;
         client = new MexcClientClass(apiKey, apiSecret);
         break;
-      case "binance":
+      }
+      case "binance": {
         const BinanceClientClass =
           env.__mocks__?.BinanceClient || BinanceClient;
         client = new BinanceClientClass(apiKey, apiSecret);
         break;
-      case "bybit":
+      }
+      case "bybit": {
         const BybitClientClass = env.__mocks__?.BybitClient || BybitClient;
         client = new BybitClientClass(apiKey, apiSecret);
         break;
+      }
       // No default needed here as exchange was validated earlier
     }
 
@@ -272,23 +279,27 @@ async function handleRequest(request, env) {
       reduceOnly = false;
 
     switch (action.toUpperCase()) {
-      case "LONG":
+      case "LONG": {
         side = "BUY";
         reduceOnly = false;
         break;
-      case "SHORT":
+      }
+      case "SHORT": {
         side = "SELL";
         reduceOnly = false;
         break;
-      case "CLOSE_LONG":
+      }
+      case "CLOSE_LONG": {
         side = "SELL";
         reduceOnly = true;
         break;
-      case "CLOSE_SHORT":
+      }
+      case "CLOSE_SHORT": {
         side = "BUY";
         reduceOnly = true;
         break;
-      default:
+      }
+      default: {
         const response = new Response(
           JSON.stringify({
             success: false,
@@ -298,6 +309,7 @@ async function handleRequest(request, env) {
         );
         await dbLogger.logResponse(requestId, response, null, startTime);
         return response;
+      }
     }
 
     // Set leverage if provided

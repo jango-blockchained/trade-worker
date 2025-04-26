@@ -31,29 +31,30 @@ export class MexcClient {
   }
 
   // Set leverage for a symbol
-  async setLeverage(symbol, leverage) {
+  async setLeverage(symbol, leverage, _reduceOnly = false) {
+    // Prefix reduceOnly
+    const endpoint = "/fapi/v1/leverage";
+    const params = {
+      symbol: symbol,
+      leverage: leverage,
+    };
+
+    const timestamp = Date.now();
+    const signature = await this.generateSignature(params, timestamp);
+
+    params.signature = signature;
+
+    const requestBody = JSON.stringify(params);
+    // const queryString = `?${new URLSearchParams(params).toString()}`; // Remove unused
+
     try {
-      const timestamp = Date.now();
-      const params = {
-        symbol: symbol,
-        leverage: leverage,
-      };
-
-      const signature = await this.generateSignature(params, timestamp);
-      const queryString = Object.entries(params)
-        .map(([key, value]) => `${key}=${value}`)
-        .join("&");
-
-      const response = await fetch(
-        `${this.baseUrl}/api/v1/private/position/change-leverage?${queryString}&timestamp=${timestamp}&signature=${signature}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-MEXC-APIKEY": this.apiKey,
-          },
-        }
-      );
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-MEXC-APIKEY": this.apiKey,
+        },
+      });
 
       if (!response.ok) {
         const error = await response.json();

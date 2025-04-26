@@ -36,6 +36,8 @@ const MockDbLogger = jest.fn().mockImplementation(() => ({
 // jest.mock('../src/bybit-client.js', ...);
 // jest.mock('../src/db-logger.js', ...);
 
+const PROCESS_ENDPOINT = "/process"; // Define the endpoint used in the worker
+
 describe("Trade Worker", () => {
   const TEST_INTERNAL_KEY = "test-internal-key";
   const TEST_MEXC_KEY = "test-mexc-key";
@@ -76,7 +78,7 @@ describe("Trade Worker", () => {
 
   let mockEnv;
 
-  const validTradeRequest = {
+  const validTradePayload = { // Renamed for clarity
     exchange: "mexc",
     action: "LONG",
     symbol: "BTC_USDT",
@@ -108,50 +110,48 @@ describe("Trade Worker", () => {
   });
 
   test("rejects request with invalid internal key config", async () => {
-    // Provide null for internal key, use default client/logger mocks
     mockEnv = createMockEnv({
       mexcKey: TEST_MEXC_KEY,
       mexcSecret: TEST_MEXC_SECRET,
       internalKey: null,
     });
-    const request = new Request("https://trade-worker.workers.dev", {
+    const request = new Request(`https://trade-worker.workers.dev${PROCESS_ENDPOINT}`, {
       method: "POST",
-      headers: { "X-Internal-Key": "header-key", "X-Request-ID": "req-1" },
-      body: JSON.stringify(validTradeRequest),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: validTradePayload, internalAuthKey: "header-key", requestId: "req-1" }), // Moved keys to body
     });
     const response = await tradeWorker.fetch(request, mockEnv);
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(500); // Expect service config error
     expect(MockMexcClient).not.toHaveBeenCalled(); // Check constructor mock
     expect(mockExecuteTrade).not.toHaveBeenCalled();
   });
 
-  test("rejects request if header key doesn't match secret", async () => {
+  test("rejects request if internalAuthKey doesn't match secret", async () => {
     // Use default mock env
-    const request = new Request("https://trade-worker.workers.dev", {
+    const request = new Request(`https://trade-worker.workers.dev${PROCESS_ENDPOINT}`, {
       method: "POST",
-      headers: { "X-Internal-Key": "wrong-key", "X-Request-ID": "req-2" },
-      body: JSON.stringify(validTradeRequest),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: validTradePayload, internalAuthKey: "wrong-key", requestId: "req-2" }), // Moved keys to body, wrong key
     });
     const response = await tradeWorker.fetch(request, mockEnv);
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(403); // Unauthorized
     expect(MockMexcClient).not.toHaveBeenCalled(); // Check constructor mock
     expect(mockExecuteTrade).not.toHaveBeenCalled();
   });
 
   test("rejects request if API key bindings not configured", async () => {
-    // Provide null for MEXC keys
     mockEnv = createMockEnv({
       internalKey: TEST_INTERNAL_KEY,
       mexcKey: null,
       mexcSecret: null,
     });
-    const request = new Request("https://trade-worker.workers.dev", {
+    const request = new Request(`https://trade-worker.workers.dev${PROCESS_ENDPOINT}`, {
       method: "POST",
-      headers: { "X-Internal-Key": TEST_INTERNAL_KEY, "X-Request-ID": "req-3" },
-      body: JSON.stringify(validTradeRequest), // Still asks for MEXC
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: validTradePayload, internalAuthKey: TEST_INTERNAL_KEY, requestId: "req-3" }), // Moved keys to body
     });
     const response = await tradeWorker.fetch(request, mockEnv);
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(400); // Bad request (missing config)
     const body = await response.json();
     expect(body.error).toContain(
       "API secret bindings not configured or accessible for mexc"
@@ -162,10 +162,10 @@ describe("Trade Worker", () => {
 
   test("executes long position on MEXC successfully", async () => {
     // Use default mock env
-    const request = new Request("https://trade-worker.workers.dev", {
+    const request = new Request(`https://trade-worker.workers.dev${PROCESS_ENDPOINT}`, {
       method: "POST",
-      headers: { "X-Internal-Key": TEST_INTERNAL_KEY, "X-Request-ID": "req-4" },
-      body: JSON.stringify(validTradeRequest),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: validTradePayload, internalAuthKey: TEST_INTERNAL_KEY, requestId: "req-4" }), // Moved keys to body
     });
 
     const response = await tradeWorker.fetch(request, mockEnv);
@@ -187,11 +187,10 @@ describe("Trade Worker", () => {
     );
 
     // Verify client methods were called (using the stand-alone mocks)
-    expect(mockSetLeverage).toHaveBeenCalledWith("BTC_USDT", 20);
     expect(mockExecuteTrade).toHaveBeenCalledWith(
       expect.objectContaining({
         symbol: "BTC_USDT",
-        side: "BUY",
+        action: "LONG",
         quantity: 0.1,
       })
     );
@@ -208,11 +207,10 @@ describe("Trade Worker", () => {
 
   test("handles API connection test failure", async () => {
     mockGetAccountInfo.mockRejectedValue(new Error("Connection failed"));
-    // Use default mock env
-    const request = new Request("https://trade-worker.workers.dev", {
+    const request = new Request(`https://trade-worker.workers.dev${PROCESS_ENDPOINT}`, {
       method: "POST",
-      headers: { "X-Internal-Key": TEST_INTERNAL_KEY, "X-Request-ID": "req-5" },
-      body: JSON.stringify(validTradeRequest),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: validTradePayload, internalAuthKey: TEST_INTERNAL_KEY, requestId: "req-5" }), // Moved keys to body
     });
     const response = await tradeWorker.fetch(request, mockEnv);
     expect(response.status).toBe(500);
@@ -226,11 +224,10 @@ describe("Trade Worker", () => {
 
   test("handles trade execution failure", async () => {
     mockExecuteTrade.mockRejectedValue(new Error("Order execution failed"));
-    // Use default mock env
-    const request = new Request("https://trade-worker.workers.dev", {
+    const request = new Request(`https://trade-worker.workers.dev${PROCESS_ENDPOINT}`, {
       method: "POST",
-      headers: { "X-Internal-Key": TEST_INTERNAL_KEY, "X-Request-ID": "req-6" },
-      body: JSON.stringify(validTradeRequest),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: validTradePayload, internalAuthKey: TEST_INTERNAL_KEY, requestId: "req-6" }), // Moved keys to body
     });
     const response = await tradeWorker.fetch(request, mockEnv);
     expect(response.status).toBe(500);

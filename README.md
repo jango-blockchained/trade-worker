@@ -28,10 +28,10 @@ A Cloudflare Worker service for executing cryptocurrency trades across multiple 
 2.  Set your Cloudflare account ID in `wrangler.toml`.
 3.  Configure the `D1_WORKER_URL` in `wrangler.toml` (`vars` section) to point to your deployed D1 worker.
 4.  Configure Secrets (via Cloudflare dashboard Secrets Store or `wrangler secret put`):
-    *   `WEBHOOK_INTERNAL_KEY`: The **shared** secret key used for authentication with the `webhook-receiver`. Bind this to `INTERNAL_KEY_BINDING` in `wrangler.toml`.
-    *   `MEXC_API_KEY`, `MEXC_API_SECRET`: If using MEXC. Bind to `MEXC_KEY_BINDING`, `MEXC_SECRET_BINDING`.
-    *   `BINANCE_API_KEY`, `BINANCE_API_SECRET`: If using Binance. Bind to `BINANCE_KEY_BINDING`, `BINANCE_SECRET_BINDING`.
-    *   `BYBIT_API_KEY`, `BYBIT_API_SECRET`: If using Bybit. Bind to `BYBIT_KEY_BINDING`, `BYBIT_SECRET_BINDING`.
+    - `WEBHOOK_INTERNAL_KEY`: The **shared** secret key used for authentication with the `webhook-receiver`. Bind this to `INTERNAL_KEY_BINDING` in `wrangler.toml`.
+    - `MEXC_API_KEY`, `MEXC_API_SECRET`: If using MEXC. Bind to `MEXC_KEY_BINDING`, `MEXC_SECRET_BINDING`.
+    - `BINANCE_API_KEY`, `BINANCE_API_SECRET`: If using Binance. Bind to `BINANCE_KEY_BINDING`, `BINANCE_SECRET_BINDING`.
+    - `BYBIT_API_KEY`, `BYBIT_API_SECRET`: If using Bybit. Bind to `BYBIT_KEY_BINDING`, `BYBIT_SECRET_BINDING`.
 5.  For local development, create a `.dev.vars` file and define the URLs and secrets:
     ```.dev.vars
     D1_WORKER_URL="http://localhost:<d1_worker_port>"
@@ -45,11 +45,13 @@ A Cloudflare Worker service for executing cryptocurrency trades across multiple 
 ## Development
 
 Run locally (e.g., on port 8788):
+
 ```bash
 bun run dev --port 8788
 ```
 
 Deploy:
+
 ```bash
 bun run deploy
 ```
@@ -62,19 +64,20 @@ This worker **only** accepts requests from the `webhook-receiver` (or another au
 - **Endpoint:** `/process`
 - **Content-Type:** `application/json`
 - **Expected Request Body:**
+
   ```json
   {
     "requestId": "<uuid_from_receiver>",
     "internalAuthKey": "YOUR_INTERNAL_SHARED_SECRET", // Validated against INTERNAL_KEY_BINDING
     "payload": {
       // --- Trade-specific payload fields below ---
-      "exchange": "binance",       // Required (e.g., "mexc", "binance", "bybit")
-      "action": "LONG",            // Required (e.g., "LONG", "SHORT", "CLOSE_LONG", "CLOSE_SHORT")
-      "symbol": "BTCUSDT",         // Required (Exchange-specific symbol format)
-      "quantity": 0.001,          // Required (Positive number)
-      "price": 65000,             // Optional (for LIMIT orders)
-      "orderType": "MARKET",        // Optional (Defaults to "MARKET", use "LIMIT" with price)
-      "leverage": 20                // Optional (Defaults to 20)
+      "exchange": "binance", // Required (e.g., "mexc", "binance", "bybit")
+      "action": "LONG", // Required (e.g., "LONG", "SHORT", "CLOSE_LONG", "CLOSE_SHORT")
+      "symbol": "BTCUSDT", // Required (Exchange-specific symbol format)
+      "quantity": 0.001, // Required (Positive number)
+      "price": 65000, // Optional (for LIMIT orders)
+      "orderType": "MARKET", // Optional (Defaults to "MARKET", use "LIMIT" with price)
+      "leverage": 20 // Optional (Defaults to 20)
     }
   }
   ```
@@ -82,15 +85,19 @@ This worker **only** accepts requests from the `webhook-receiver` (or another au
 - **Response Format:**
 
   **Success:**
+
   ```json
   {
     "success": true,
-    "result": { /* Exchange-specific order details from executeTrade */ },
+    "result": {
+      /* Exchange-specific order details from executeTrade */
+    },
     "error": null
   }
   ```
 
   **Error:**
+
   ```json
   {
     "success": false,
@@ -115,8 +122,8 @@ The worker logs incoming requests and outgoing responses (including errors) to a
 
 ## Security
 
-- All requests *must* be received on the `/process` endpoint.
-- Requests *must* include a valid `internalAuthKey` in the body, matching the `WEBHOOK_INTERNAL_KEY` secret.
+- All requests _must_ be received on the `/process` endpoint.
+- Requests _must_ include a valid `internalAuthKey` in the body, matching the `WEBHOOK_INTERNAL_KEY` secret.
 - Exchange API keys/secrets are stored securely using Cloudflare Workers Secrets.
 - Validates the trade parameters within the `payload`.
 

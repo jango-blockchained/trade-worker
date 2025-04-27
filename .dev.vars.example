@@ -1,5 +1,5 @@
 # Trade Worker Environment Variables
-INTERNAL_SERVICE_KEY=your_internal_service_key_here
+# INTERNAL_SERVICE_KEY=your_internal_service_key_here
 MEXC_API_KEY=your_mexc_api_key_here
 MEXC_API_SECRET=your_mexc_api_secret_here
 BINANCE_API_KEY=your_binance_api_key_here

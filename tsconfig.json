@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    /* Base Options */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "es2020", // Target modern JS for Workers
+    "allowJs": false, // Set to true if you mix JS and TS, false otherwise
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+
+    /* Strictness */
+    "strict": true,
+    "noUncheckedIndexedAccess": true, // Recommended for stricter checks
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+
+    /* Bundler Behavior */
+    "moduleResolution": "bundler", // Aligns with modern bundlers like esbuild (used by Wrangler)
+    "module": "esnext", // Use ES modules
+    "noEmit": true, // Let Wrangler handle emit/bundling
+    "allowImportingTsExtensions": true, // If using .ts extensions in imports
+    "isolatedModules": true, // Ensure files can be compiled independently
+
+    /* Cloudflare Workers Types */
+    "types": ["@cloudflare/workers-types"],
+    "lib": ["es2020", "webworker"], // Include ES2020 and Web Worker libs
+
+    /* Path Aliases (Optional - adjust if needed for monorepo structure) */
+    // "baseUrl": ".", // Base directory for path resolution
+    // "paths": {
+    //   "@shared/*": ["../../shared/*"] // Example alias for shared code
+    // }
+  },
+  "include": ["src/**/*.ts"], // Only include TypeScript files in the src directory
+  "exclude": ["node_modules", "dist"]
+} 

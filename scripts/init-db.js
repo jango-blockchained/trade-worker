@@ -1,48 +1,56 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import { execSync } from "child_process";
 
-async function initDatabase() {
-  const D1_WORKER_URL = process.env.D1_WORKER_URL || "http://localhost:8787";
-  const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY;
+function initDatabase() {
+  const environment = process.env.ENVIRONMENT || "local"; // Default to local
+  const databaseId = process.env.D1_DATABASE_ID; // Get from environment if needed for remote
+  const workerName = "d1-worker"; // Name of the worker associated with the DB
 
-  if (!INTERNAL_SERVICE_KEY) {
+  if (environment === "remote" && !databaseId) {
     console.error(
-      "Error: INTERNAL_SERVICE_KEY environment variable is required"
+      "Error: D1_DATABASE_ID environment variable is required for remote execution."
     );
     process.exit(1);
   }
 
   try {
-    // Read SQL file
     const sqlPath = join(__dirname, "init-db.sql");
-    const sqlContent = readFileSync(sqlPath, "utf-8");
 
-    // Split SQL content into individual statements
-    const statements = sqlContent
-      .split(";")
-      .map((stmt) => stmt.trim())
-      .filter((stmt) => stmt.length > 0)
-      .map((query) => ({ query, params: [] }));
+    console.log(`Initializing database using ${sqlPath}...`);
 
-    // Send batch request to D1 worker
-    const response = await fetch(`${D1_WORKER_URL}/batch`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${INTERNAL_SERVICE_KEY}`,
-      },
-      body: JSON.stringify({ statements }),
-    });
+    // Construct the wrangler d1 execute command
+    let command = `npx wrangler d1 execute`;
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to initialize database: ${error}`);
+    // Determine the database identifier for wrangler
+    // For local, it's often the worker name if defined in wrangler.toml
+    // For remote, it might be explicitly defined or inferred.
+    // Let's assume wrangler can infer it from the d1_databases section in d1-worker/wrangler.toml
+    // If you have multiple D1s, you might need to pass the specific DB name/ID.
+    // We'll try using the worker's configured DB binding name (check d1-worker/wrangler.toml)
+    // Assuming the binding name in d1-worker/wrangler.toml is 'DB'
+    command += ` DB`; // Replace 'DB' if your binding name is different
+
+    if (environment === "local") {
+      command += ` --local`;
+    } else {
+      // Potentially add --remote flag if needed, though wrangler might default correctly
+      // command += ` --remote`; // Uncomment if necessary
     }
 
-    const result = await response.json();
-    console.log("Database initialized successfully:", result);
+    command += ` --file=${sqlPath}`;
+
+    console.log(`Executing command: ${command}`);
+
+    // Execute the command synchronously
+    execSync(command, { stdio: "inherit" });
+
+    console.log("Database initialization command executed successfully.");
+
   } catch (error) {
-    console.error("Error initializing database:", error);
+    console.error("Error initializing database:", error.message);
+    if (error.stdout) console.error("stdout:", error.stdout.toString());
+    if (error.stderr) console.error("stderr:", error.stderr.toString());
     process.exit(1);
   }
 }

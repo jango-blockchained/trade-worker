@@ -2,6 +2,8 @@ import { MexcClient, type IMexcClient } from "./mexc-client"; // Removed .js
 import { BinanceClient, type IBinanceClient } from "./binance-client"; // Removed .js
 import { BybitClient, type IBybitClient } from "./bybit-client"; // Removed .js
 import { DbLogger, type IDbLogger } from "./db-logger"; // Removed .js
+import type { KVNamespace } from "@cloudflare/workers-types"; // Import KVNamespace
+import { logKvTimestamp, type EnvWithKV } from "../../src/utils/kvUtils"; // Import shared function and Env type
 
 // --- Type Definitions ---
 
@@ -10,7 +12,8 @@ interface SecretBinding {
 }
 
 // Define the expected environment variables and bindings
-interface Env {
+interface Env extends EnvWithKV {
+  // CONFIG_KV: KVNamespace; // Inherited from EnvWithKV
   // Bindings from wrangler.toml
   D1_SERVICE?: Fetcher; // Service binding for d1-worker
   INTERNAL_KEY_BINDING?: SecretBinding; // For internal auth (expects WEBHOOK_INTERNAL_KEY)
@@ -92,6 +95,9 @@ const WEBHOOK_ENDPOINT = "/webhook"; // For calls from webhook-receiver via Serv
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    // Call the shared KV logging function
+    await logKvTimestamp(env);
 
     if (request.method === "POST") {
       if (url.pathname === PROCESS_ENDPOINT) {

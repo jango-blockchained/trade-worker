@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@binance/connector-typescript": "^0.3.16",
+    "@cloudflare/puppeteer": "^1.0.2",
     "bybit-api": "^4.1.5",
     "typescript": "^5.8.3"
   },

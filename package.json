@@ -10,7 +10,8 @@
     "init-db": "node scripts/init-db.js",
     "test": "bun test",
     "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "@binance/connector-typescript": "^0.3.16",

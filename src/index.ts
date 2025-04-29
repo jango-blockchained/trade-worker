@@ -7,6 +7,7 @@ import { logKvTimestamp, type EnvWithKV } from "../../src/utils/kvUtils"; // Imp
 import type { R2Bucket } from "@cloudflare/workers-types"; // Import R2Bucket type
 import { ExecutionContext } from "@cloudflare/workers"; // Import ExecutionContext
 import type { Ai } from '@cloudflare/ai'; // Import the Ai type
+import type { D1Database } from '@cloudflare/workers-types'; // Import D1Database type
 
 // --- Type Definitions ---
 
@@ -16,6 +17,7 @@ interface SecretBinding {
 
 // Define the expected environment variables and bindings
 interface Env extends EnvWithKV {
+  DB: D1Database; // Add the D1 binding
   AI: Ai; // Add the AI binding
   REPORTS_BUCKET: R2Bucket; // Add R2 binding for reports
   // CONFIG_KV: KVNamespace; // Inherited from EnvWithKV
@@ -90,10 +92,21 @@ interface StandardResponse {
   error?: string | null; // Error message on failure
 }
 
+// Structure for storing trade signals in D1
+interface TradeSignalRecord {
+  signal_id: string; // UUID
+  timestamp: number; // Unix timestamp
+  symbol: string;
+  signal_type: 'BUY' | 'SELL' | 'HOLD' | 'CLOSE' | string; // Allow other types
+  source?: string;
+  raw_data?: string; // JSON stringified payload
+}
+
 // --- Constants ---
 
 const PROCESS_ENDPOINT = "/process"; // For legacy/direct calls with internal key
 const WEBHOOK_ENDPOINT = "/webhook"; // For calls from webhook-receiver via Service Binding
+const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
 
 // --- Worker Definition ---
 
@@ -107,6 +120,13 @@ export default {
     // --- Add GET endpoint for retrieving R2 reports --- 
     if (request.method === "GET" && url.pathname === "/report") {
       return await handleGetReportRequest(request, env);
+    } else if (url.pathname === SIGNALS_ENDPOINT) {
+      // Handle GET and POST for D1 signals
+      if (request.method === "GET") {
+          return await handleGetSignalsRequest(request, env);
+      } else if (request.method === "POST") {
+          return await handlePostSignalRequest(request, env);
+      }
     }
     // --- End R2 report endpoint ---
 
@@ -668,5 +688,107 @@ async function handleAiTest(request: Request, env: Env): Promise<Response> {
         const errorMsg = error instanceof Error ? error.message : String(error || "Unknown AI error");
         console.error(`Error calling AI: ${errorMsg}`, error);
         return createJsonResponse({ success: false, error: `AI request failed: ${errorMsg}` }, 500);
+    }
+}
+
+// --- D1 Helper Functions ---
+
+/**
+ * Inserts a trade signal into the D1 database.
+ */
+async function insertSignal(signal: TradeSignalRecord, env: Env): Promise<D1Result> {
+    if (!env.DB) {
+        throw new Error("D1 Database (DB) binding not configured.");
+    }
+    const stmt = env.DB.prepare(
+        `INSERT INTO trade_signals (signal_id, timestamp, symbol, signal_type, source, raw_data) 
+         VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    return await stmt.bind(
+        signal.signal_id,
+        signal.timestamp,
+        signal.symbol,
+        signal.signal_type,
+        signal.source ?? null, // Use null if source is undefined
+        signal.raw_data ?? null // Use null if raw_data is undefined
+    ).run();
+}
+
+/**
+ * Retrieves recent trade signals from the D1 database.
+ */
+async function getRecentSignals(env: Env, limit: number = 10): Promise<D1Result<TradeSignalRecord>> {
+     if (!env.DB) {
+        throw new Error("D1 Database (DB) binding not configured.");
+    }
+    const stmt = env.DB.prepare(
+        `SELECT signal_id, timestamp, symbol, signal_type, source, processed_at 
+         FROM trade_signals 
+         ORDER BY processed_at DESC 
+         LIMIT ?`
+    );
+    return await stmt.bind(limit).all<TradeSignalRecord>();
+}
+
+// --- Request Handlers for D1 ---
+
+/**
+ * Handles POST requests to insert a new trade signal into D1.
+ */
+async function handlePostSignalRequest(request: Request, env: Env): Promise<Response> {
+    let signalPayload: any;
+    try {
+        signalPayload = await request.json();
+    } catch (e) {
+        return createJsonResponse({ success: false, error: "Invalid JSON payload" }, 400);
+    }
+
+    // Basic validation (expand as needed)
+    if (!signalPayload.symbol || !signalPayload.signal_type || !signalPayload.timestamp) {
+        return createJsonResponse({ success: false, error: "Missing required fields: symbol, signal_type, timestamp" }, 400);
+    }
+
+    const signalRecord: TradeSignalRecord = {
+        signal_id: crypto.randomUUID(), // Generate a unique ID
+        timestamp: signalPayload.timestamp, // Assume provided timestamp is correct
+        symbol: signalPayload.symbol,
+        signal_type: signalPayload.signal_type,
+        source: signalPayload.source,
+        raw_data: JSON.stringify(signalPayload) // Store the whole payload as raw data
+    };
+
+    try {
+        const result = await insertSignal(signalRecord, env);
+        if (result.success) {
+            console.log(`Successfully inserted signal ID: ${signalRecord.signal_id}`);
+            return createJsonResponse({ success: true, result: { signalId: signalRecord.signal_id } }, 201); // 201 Created
+        } else {
+            console.error("D1 insert failed:", result.error);
+            return createJsonResponse({ success: false, error: "Failed to store signal in database." }, 500);
+        }
+    } catch (error) {
+        console.error("Error inserting signal into D1:", error);
+        return createJsonResponse({ success: false, error: "Internal server error while storing signal." }, 500);
+    }
+}
+
+/**
+ * Handles GET requests to retrieve recent trade signals from D1.
+ */
+async function handleGetSignalsRequest(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const limitParam = url.searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : 10;
+
+    if (isNaN(limit) || limit <= 0 || limit > 100) { // Add reasonable limit bounds
+         return createJsonResponse({ success: false, error: "Invalid limit parameter. Must be between 1 and 100." }, 400);
+    }
+
+    try {
+        const results = await getRecentSignals(env, limit);
+        return createJsonResponse({ success: true, result: results.results || [] }, 200);
+    } catch (error) {
+        console.error("Error retrieving signals from D1:", error);
+        return createJsonResponse({ success: false, error: "Internal server error while retrieving signals." }, 500);
     }
 } 

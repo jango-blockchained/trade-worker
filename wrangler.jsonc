@@ -55,7 +55,15 @@
   },
   "browser": {
     "binding": "BROWSER"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB", // Standard binding name
+      "database_name": "trade-data-db",
+      "database_id": "a682f084-594e-4bd8-be2d-40ea5f8cf42e", // ID from wrangler d1 create output
+      "preview_database_id": "a682f084-594e-4bd8-be2d-40ea5f8cf42e" // Use same for preview for now
+    }
+  ]
   // Note: Removed secrets_store_secrets definition. Secrets are now declared in vars and expected via `wrangler secret put`.
   // Note: Removed commented-out D1_WORKER_URL var.
 } 

@@ -4,6 +4,9 @@ import { BybitClient, type IBybitClient } from "./bybit-client"; // Removed .js
 import { DbLogger, type IDbLogger } from "./db-logger"; // Removed .js
 import type { KVNamespace } from "@cloudflare/workers-types"; // Import KVNamespace
 import { logKvTimestamp, type EnvWithKV } from "../../src/utils/kvUtils"; // Import shared function and Env type
+import type { R2Bucket } from "@cloudflare/workers-types"; // Import R2Bucket type
+import { ExecutionContext } from "@cloudflare/workers"; // Import ExecutionContext
+import type { Ai } from '@cloudflare/ai'; // Import the Ai type
 
 // --- Type Definitions ---
 
@@ -13,6 +16,8 @@ interface SecretBinding {
 
 // Define the expected environment variables and bindings
 interface Env extends EnvWithKV {
+  AI: Ai; // Add the AI binding
+  REPORTS_BUCKET: R2Bucket; // Add R2 binding for reports
   // CONFIG_KV: KVNamespace; // Inherited from EnvWithKV
   // Bindings from wrangler.toml
   D1_SERVICE?: Fetcher; // Service binding for d1-worker
@@ -93,17 +98,31 @@ const WEBHOOK_ENDPOINT = "/webhook"; // For calls from webhook-receiver via Serv
 // --- Worker Definition ---
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     // Call the shared KV logging function
     await logKvTimestamp(env);
 
+    // --- Add GET endpoint for retrieving R2 reports --- 
+    if (request.method === "GET" && url.pathname === "/report") {
+      return await handleGetReportRequest(request, env);
+    }
+    // --- End R2 report endpoint ---
+
+    // --- Add temporary GET endpoint for testing AI ---
+    if (request.method === "GET" && url.pathname === "/test-ai") {
+      // Ensure this endpoint is removed or secured before production!
+      console.warn("Executing temporary /test-ai endpoint...");
+      return await handleAiTest(request, env);
+    }
+    // --- End temporary test endpoint ---
+
     if (request.method === "POST") {
       if (url.pathname === PROCESS_ENDPOINT) {
-        return await handleProcessRequest(request, env);
+        return await handleProcessRequest(request, env, ctx);
       } else if (url.pathname === WEBHOOK_ENDPOINT) {
-        return await handleWebhookRequest(request, env);
+        return await handleWebhookRequest(request, env, ctx);
       }
     }
 
@@ -197,6 +216,56 @@ function createJsonResponse(
   });
 }
 
+/**
+ * Saves a trade report object to the R2 bucket.
+ * Task 3.5 & 3.6
+ */
+async function saveReportToR2(
+  reportData: any, // The trade result or formatted report data
+  payload: WebhookPayload,
+  dbLogId: number | null,
+  env: Env
+): Promise<void> {
+  if (!env.REPORTS_BUCKET) {
+    console.error(`[${dbLogId}] REPORTS_BUCKET binding is not configured. Skipping report save.`);
+    return;
+  }
+
+  try {
+    // Format a simple report (can be expanded later)
+    const reportContent = JSON.stringify({ 
+      timestamp: new Date().toISOString(),
+      tradePayload: payload,
+      tradeResult: reportData,
+      dbLogId: dbLogId, 
+    }, null, 2);
+
+    // Generate a unique filename
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-"); // Filesystem-friendly timestamp
+    const filename = `trade-reports/${payload.exchange}/${payload.symbol}/${timestamp}-${dbLogId || 'no-id'}.json`;
+
+    console.log(`[${dbLogId}] Attempting to save report to R2: ${filename}`);
+
+    // Put the object into the R2 bucket
+    const r2Object = await env.REPORTS_BUCKET.put(filename, reportContent, {
+      httpMetadata: { contentType: 'application/json' },
+      // Optionally add custom metadata
+      // customMetadata: {
+      //   exchange: payload.exchange,
+      //   symbol: payload.symbol,
+      //   action: payload.action,
+      // },
+    });
+
+    console.log(`[${dbLogId}] Successfully saved report to R2. ETag: ${r2Object?.etag}`);
+
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error || "Unknown R2 error");
+    console.error(`[${dbLogId}] Failed to save report to R2: ${errorMsg}`, error);
+    // Decide if this error should trigger an alert or other action
+  }
+}
+
 // --- Core Trade Execution Logic ---
 
 /**
@@ -284,15 +353,64 @@ async function executeTrade(
     console.log("Trade execution successful:", result);
     const response = createJsonResponse({ success: true, result: result, error: null });
     await dbLogger.logResponse(dbLogId, response, null, startTime);
-    return response;
 
-  } catch (error: any) {
-    console.error("Error during trade execution:", error);
-    const response = createJsonResponse({
-      success: false,
-      error: error.message || "Trade execution failed",
-    }, 500);
-    await dbLogger.logResponse(dbLogId, response, error, startTime);
+    // --- Task 10.5: Example Inter-Worker Communication ---
+    // Example: Send notification via telegram-worker after trade execution
+    try {
+      const notificationMessage = result?.success
+        ? `Trade executed successfully on ${exchange}: ${action} ${quantity} ${symbol}. Result: ${JSON.stringify(result.result)}`
+        : `Trade execution failed on ${exchange}: ${action} ${quantity} ${symbol}. Error: ${result?.error || "Unknown error"}`;
+
+      const telegramPayload = {
+        message: notificationMessage,
+        // chatId: "SPECIFIC_CHAT_ID_IF_NEEDED", // Optional: Override default chat ID
+      };
+
+      const telegramWorkerRequest = new Request(
+        "https://telegram-worker.your-domain.workers.dev/webhook", // Use telegram-worker webhook endpoint
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(telegramPayload),
+        }
+      );
+
+      console.log(`[${dbLogId}] Calling TELEGRAM_API service binding for notification...`);
+      // const notificationResponse = await env.TELEGRAM_API.fetch(telegramWorkerRequest);
+      // if (!notificationResponse.ok) {
+      //   console.error(
+      //     `[${dbLogId}] Error calling TELEGRAM_API for notification: ${notificationResponse.status} ${await notificationResponse.text()}`
+      //   );
+      //   // Log error, but don't fail the trade response based on notification failure
+      // }
+      // else {
+      //    console.log(`[${dbLogId}] Notification sent via TELEGRAM_API.`);
+      // }
+      console.log(`[${dbLogId}] Skipped calling TELEGRAM_API for notification (placeholder).`); // Placeholder log
+
+    } catch (notificationError: unknown) {
+       const errorMsg = notificationError instanceof Error ? notificationError.message : String(notificationError || "Unknown notification error");
+       console.error(`[${dbLogId}] Exception calling TELEGRAM_API for notification:`, errorMsg, notificationError);
+       // Log error, but don't fail the trade response
+    }
+    // --- End Task 10.5 ---
+
+    return response;
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error || "Internal server error");
+    console.error("Error in executeTrade:", errorMsg, error);
+    const response = createJsonResponse(
+      { success: false, error: `Trade execution failed: ${errorMsg}` },
+      500
+    );
+    // Log failure response, even if dbLogId might be null in edge cases
+    if (dbLogger && dbLogId !== null) {
+        try {
+            await dbLogger.logResponse(dbLogId, response, null, startTime);
+        } catch (logErr) {
+            console.error("Failed to log error response to D1:", logErr);
+        }
+    }
     return response;
   }
 }
@@ -302,7 +420,7 @@ async function executeTrade(
 /**
  * Handles POST requests to the /webhook endpoint (from service bindings).
  */
-async function handleWebhookRequest(request: Request, env: Env): Promise<Response> {
+async function handleWebhookRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const startTime = Date.now();
   // Use mock or real DbLogger
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
@@ -326,7 +444,26 @@ async function handleWebhookRequest(request: Request, env: Env): Promise<Respons
       return response;
     }
 
-    return await executeTrade(payload, env, dbLogger, startTime, dbLogId);
+    // *** Call executeTrade ***
+    const tradeResponse = await executeTrade(payload, env, dbLogger, startTime, dbLogId);
+
+    // --- Task 3.5: Save Report on Success ---
+    if (tradeResponse.ok) { // Check if trade execution itself was successful
+      try {
+        const tradeResult = await tradeResponse.json(); // Need the result for the report
+        if (tradeResult.success) {
+            console.log(`[${incomingRequestId}] Trade successful, queueing report save to R2.`);
+            ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
+        } else {
+            console.log(`[${incomingRequestId}] Trade execution reported failure, skipping R2 report save.`);
+        }
+      } catch(e) {
+         console.error(`[${incomingRequestId}] Failed to parse trade response for R2 reporting:`, e);
+      }
+    }
+    // --- End Task 3.5 ---
+
+    return tradeResponse; // Return the original trade response
 
   } catch (error: any) {
     console.error(`Error in handleWebhookRequest for ID ${incomingRequestId}:`, error);
@@ -353,7 +490,7 @@ async function handleWebhookRequest(request: Request, env: Env): Promise<Respons
 /**
  * Handles the standardized processing request (/process endpoint).
  */
-async function handleProcessRequest(request: Request, env: Env): Promise<Response> {
+async function handleProcessRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const startTime = Date.now();
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
   const dbLogger = new DbLoggerClass(env);
@@ -402,8 +539,26 @@ async function handleProcessRequest(request: Request, env: Env): Promise<Respons
       return response;
     }
 
-    // Execute the trade using the refactored function
-    return await executeTrade(payload, env, dbLogger, startTime, dbLogId);
+    // *** Call executeTrade ***
+    const tradeResponse = await executeTrade(payload, env, dbLogger, startTime, dbLogId);
+
+    // --- Task 3.5: Save Report on Success ---
+    if (tradeResponse.ok) { // Check if trade execution itself was successful
+      try {
+        const tradeResult = await tradeResponse.json(); // Need the result for the report
+        if (tradeResult.success) {
+            console.log(`[${incomingRequestId}] Trade successful, queueing report save to R2.`);
+            ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
+        } else {
+            console.log(`[${incomingRequestId}] Trade execution reported failure, skipping R2 report save.`);
+        }
+      } catch(e) {
+         console.error(`[${incomingRequestId}] Failed to parse trade response for R2 reporting:`, e);
+      }
+    }
+    // --- End Task 3.5 ---
+
+    return tradeResponse; // Return the original trade response
 
   } catch (error: any) {
     console.error(`Error in handleProcessRequest for ID ${incomingRequestId}:`, error);
@@ -426,4 +581,92 @@ async function handleProcessRequest(request: Request, env: Env): Promise<Respons
     }
     return response;
   }
+}
+
+/**
+ * Handles GET requests to retrieve a specific report from R2.
+ * Expects a 'key' query parameter specifying the R2 object key.
+ * Task 3.5
+ */
+async function handleGetReportRequest(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const key = url.searchParams.get("key");
+
+    if (!key) {
+        return new Response("Missing 'key' query parameter", { status: 400 });
+    }
+
+    if (!env.REPORTS_BUCKET) {
+        console.error("REPORTS_BUCKET binding is not configured.");
+        return new Response("R2 service not configured.", { status: 500 });
+    }
+
+    try {
+        console.log(`Attempting to retrieve R2 object with key: ${key}`);
+        const object = await env.REPORTS_BUCKET.get(key);
+
+        if (object === null) {
+            console.log(`R2 object not found for key: ${key}`);
+            return new Response("Report not found", { status: 404 });
+        }
+
+        console.log(`Successfully retrieved R2 object: ${key}, Size: ${object.size}`);
+
+        // Prepare headers for the response
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set('etag', object.httpEtag);
+        // Optional: Set Content-Disposition to suggest a filename
+        // const filename = key.split('/').pop() || 'download';
+        // headers.set('content-disposition', `attachment; filename="${filename}"`);
+
+        // Stream the body back
+        return new Response(object.body, {
+            headers,
+        });
+
+    } catch (error: unknown) {
+        const errorMsg = error instanceof Error ? error.message : String(error || "Unknown R2 get error");
+        console.error(`Failed to retrieve R2 object ${key}: ${errorMsg}`, error);
+        return new Response(`Failed to retrieve report: ${errorMsg}`, { status: 500 });
+    }
+}
+
+/**
+ * Temporary handler for testing basic Workers AI LLM calls.
+ * Expects a 'prompt' query parameter.
+ * REMOVE OR SECURE BEFORE PRODUCTION.
+ */
+async function handleAiTest(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const prompt = url.searchParams.get("prompt");
+
+    if (!prompt) {
+        return createJsonResponse({ success: false, error: "Missing 'prompt' query parameter" }, 400);
+    }
+
+    if (!env.AI) {
+        console.error("AI binding is not configured in the environment.");
+        return createJsonResponse({ success: false, error: "AI service not available." }, 500);
+    }
+
+    try {
+        console.log(`Sending prompt to AI: "${prompt}"`);
+
+        // Basic call to the LLM
+        const response = await env.AI.run('@cf/meta/llama-3-8b-instruct', { 
+            messages: [
+                { role: 'system', content: 'You are a trading assistant.' }, // Adjusted system prompt
+                { role: 'user', content: prompt }
+            ]
+         });
+
+        console.log("Received AI response.");
+        return createJsonResponse({ success: true, result: response }, 200);
+
+    } catch (error: unknown) {
+        const errorMsg = error instanceof Error ? error.message : String(error || "Unknown AI error");
+        console.error(`Error calling AI: ${errorMsg}`, error);
+        return createJsonResponse({ success: false, error: `AI request failed: ${errorMsg}` }, 500);
+    }
 } 

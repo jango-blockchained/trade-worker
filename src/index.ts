@@ -155,7 +155,7 @@ export default {
 /**
  * Checks if API credentials seem configured for a given exchange.
  */
-async function validateApiCredentials(
+export async function validateApiCredentials(
   exchange: string,
   env: Env
 ): Promise<boolean> {
@@ -192,7 +192,7 @@ async function validateApiCredentials(
 /**
  * Validates the core trade payload structure and content.
  */
-function validateTradePayload(payload: any): ValidationResult { // Use any initially, then refine
+export function validateTradePayload(payload: any): ValidationResult { // Use any initially, then refine
     if (!payload || typeof payload !== 'object') {
         return { isValid: false, error: "Invalid or missing payload" };
     }
@@ -240,7 +240,7 @@ function createJsonResponse(
  * Saves a trade report object to the R2 bucket.
  * Task 3.5 & 3.6
  */
-async function saveReportToR2(
+export async function saveReportToR2(
   reportData: any, // The trade result or formatted report data
   payload: WebhookPayload,
   dbLogId: number | null,

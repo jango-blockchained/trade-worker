@@ -1,19 +1,30 @@
-import { describe, expect, test, beforeEach, jest } from "@jest/globals";
-import { BybitClient } from "../src/bybit-client";
+import { describe, expect, test, beforeEach, afterEach, spyOn, mock, type Mock } from "bun:test";
+import { BybitClient } from "../src/bybit-client.js";
 
 // --- Mocks ---
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+// Simplify mock fetch definition
+const mockFetch = mock(global.fetch);
+global.fetch = mockFetch as any;
 
-const mockImportKey = jest.fn();
-const mockSign = jest.fn();
-global.crypto = {
-    subtle: {
-        importKey: mockImportKey,
-        sign: mockSign,
+const mockImportKey: Mock<typeof crypto.subtle.importKey> = mock(() => Promise.resolve({} as CryptoKey));
+const mockSign: Mock<typeof crypto.subtle.sign> = mock(() => Promise.resolve(new ArrayBuffer(0)));
+
+// Mock crypto for Bun's environment
+Object.defineProperty(globalThis, 'crypto', {
+    value: {
+        subtle: {
+            importKey: mockImportKey,
+            sign: mockSign,
+        },
+        getRandomValues: mock(<T extends ArrayBufferView | null>(arr: T): T => {
+            if (arr instanceof Uint8Array) {
+                arr.fill(1);
+            }
+            return arr;
+        })
     },
-    getRandomValues: jest.fn(),
-} as any;
+    writable: true,
+});
 
 // --- Test Suite ---
 describe("BybitClient (V5)", () => {
@@ -27,37 +38,34 @@ describe("BybitClient (V5)", () => {
     let mockSignatureHex: string;
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        mock.restore();
+        mockFetch.mockClear();
+        mockImportKey.mockClear();
+        mockSign.mockClear();
 
-        fixedTimestamp = Date.now(); // Use a fixed timestamp for predictable signatures
-        jest.spyOn(Date, 'now').mockImplementation(() => fixedTimestamp);
+        fixedTimestamp = Date.now();
+        spyOn(Date, 'now').mockImplementation(() => fixedTimestamp);
 
         // Mock crypto functions
-        mockImportKey.mockResolvedValue({} as CryptoKey); // Dummy key
-        // Fixed signature for predictability
+        mockImportKey.mockResolvedValue({} as CryptoKey);
         const mockSignatureArrayBuffer = new Uint8Array([0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10]).buffer;
         mockSign.mockResolvedValue(mockSignatureArrayBuffer);
-        mockSignatureHex = "fedcba9876543210"; // Expected hex signature
+        mockSignatureHex = "fedcba9876543210";
 
         // Default fetch mock (successful Bybit V5 response)
-        mockFetch.mockResolvedValue({
-            ok: true,
-            json: async () => ({
-                retCode: 0,
-                retMsg: "OK",
-                result: { data: "mock result" },
-                time: Date.now(),
-            }),
-            status: 200,
-        });
+        mockFetch.mockResolvedValue(new Response(JSON.stringify({
+            retCode: 0,
+            retMsg: "OK",
+            result: { data: "mock result" },
+            time: Date.now(),
+        }), { status: 200 }));
 
         client = new BybitClient(API_KEY, API_SECRET);
     });
 
-    afterEach(() => {
-        // Restore Date.now mock
-        jest.restoreAllMocks();
-    });
+    // afterEach(() => {
+    //     mock.restoreAll();
+    // });
 
     // --- Constructor Tests ---
     test("should initialize with valid API key and secret", () => {
@@ -94,8 +102,10 @@ describe("BybitClient (V5)", () => {
         );
 
         // Verify the payload bytes passed to sign
-        const signCall = mockSign.mock.calls[0];
-        const payloadBuffer = signCall[2] as ArrayBuffer;
+        expect(mockSign.mock.calls.length).toBeGreaterThan(0); // Ensure call happened
+        const signCallArgs = mockSign.mock.calls[0]; // Get arguments of the first call
+        // @ts-ignore - Bun mock args structure can be complex, ignore type for simplicity here
+        const payloadBuffer = signCallArgs[2] as ArrayBuffer;
         const decodedPayload = new TextDecoder().decode(payloadBuffer);
         expect(decodedPayload).toBe(expectedPayload);
     });
@@ -105,11 +115,9 @@ describe("BybitClient (V5)", () => {
         const path = "/v5/account/wallet-balance";
         const params = { accountType: "UNIFIED", coin: "USDT" };
         const mockResultData = { list: [{ coin: "USDT", balance: "1000" }] };
-        mockFetch.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ retCode: 0, retMsg: "OK", result: mockResultData, time: Date.now() }),
-            status: 200,
-        });
+        mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({
+             retCode: 0, retMsg: "OK", result: mockResultData, time: Date.now()
+        }), { status: 200 }));
 
         // Expected sorted query string for signature and URL
         const expectedQueryString = "accountType=UNIFIED&coin=USDT";
@@ -120,22 +128,28 @@ describe("BybitClient (V5)", () => {
         expect(result).toEqual(mockResultData);
         expect(mockSign).toHaveBeenCalledTimes(1);
         // Check signature payload was correct
-         const signCall = mockSign.mock.calls[0];
-         const payloadBuffer = signCall[2] as ArrayBuffer;
-         const decodedPayload = new TextDecoder().decode(payloadBuffer);
-         expect(decodedPayload).toBe(expectedSigPayload);
+        expect(mockSign.mock.calls.length).toBeGreaterThan(0);
+        const signCallArgs = mockSign.mock.calls[0];
+        // @ts-ignore
+        const payloadBuffer = signCallArgs[2] as ArrayBuffer;
+        const decodedPayload = new TextDecoder().decode(payloadBuffer);
+        expect(decodedPayload).toBe(expectedSigPayload);
 
         expect(mockFetch).toHaveBeenCalledTimes(1);
-        const fetchCall = mockFetch.mock.calls[0];
-        const url = fetchCall[0];
-        const options = fetchCall[1];
+        expect(mockFetch.mock.calls.length).toBeGreaterThan(0);
+        const fetchCallArgs = mockFetch.mock.calls[0];
+        const url = fetchCallArgs[0] as string; // URL is the first argument
+        const options = fetchCallArgs[1] as RequestInit; // Options is the second
 
         expect(url).toBe(`${BASE_URL}${path}?${expectedQueryString}`);
         expect(options.method).toBe("GET");
-        expect(options.headers["X-BAPI-API-KEY"]).toBe(API_KEY);
-        expect(options.headers["X-BAPI-TIMESTAMP"]).toBe(String(fixedTimestamp));
-        expect(options.headers["X-BAPI-RECV-WINDOW"]).toBe(String(RECV_WINDOW));
-        expect(options.headers["X-BAPI-SIGN"]).toBe(mockSignatureHex);
+        // Add checks for headers
+        expect(options.headers).toBeDefined();
+        const headers = options.headers as Record<string, string>; // Assert as Record
+        expect(headers["X-BAPI-API-KEY"]).toBe(API_KEY);
+        expect(headers["X-BAPI-TIMESTAMP"]).toBe(String(fixedTimestamp));
+        expect(headers["X-BAPI-RECV-WINDOW"]).toBe(String(RECV_WINDOW));
+        expect(headers["X-BAPI-SIGN"]).toBe(mockSignatureHex);
         expect(options.body).toBeUndefined();
     });
 
@@ -143,11 +157,9 @@ describe("BybitClient (V5)", () => {
         const path = "/v5/order/create";
         const params = { category: "linear", symbol: "ETHUSDT", side: "Buy", orderType: "Market", qty: "0.1" };
         const mockResultData = { orderId: "12345", orderLinkId: "abc" };
-        mockFetch.mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ retCode: 0, retMsg: "OK", result: mockResultData, time: Date.now() }),
-            status: 200,
-        });
+        mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({
+            retCode: 0, retMsg: "OK", result: mockResultData, time: Date.now()
+        }), { status: 200 }));
 
         const paramsStr = JSON.stringify(params);
         const expectedSigPayload = `${fixedTimestamp}${API_KEY}${RECV_WINDOW}${paramsStr}`;
@@ -157,24 +169,29 @@ describe("BybitClient (V5)", () => {
         expect(result).toEqual(mockResultData);
         expect(mockSign).toHaveBeenCalledTimes(1);
          // Check signature payload was correct
-         const signCall = mockSign.mock.calls[0];
-         const payloadBuffer = signCall[2] as ArrayBuffer;
+         expect(mockSign.mock.calls.length).toBeGreaterThan(0);
+         const signCallArgs = mockSign.mock.calls[0];
+         // @ts-ignore
+         const payloadBuffer = signCallArgs[2] as ArrayBuffer;
          const decodedPayload = new TextDecoder().decode(payloadBuffer);
          expect(decodedPayload).toBe(expectedSigPayload);
 
 
         expect(mockFetch).toHaveBeenCalledTimes(1);
-        const fetchCall = mockFetch.mock.calls[0];
-        const url = fetchCall[0];
-        const options = fetchCall[1];
+        expect(mockFetch.mock.calls.length).toBeGreaterThan(0);
+        const fetchCallArgs = mockFetch.mock.calls[0];
+        const url = fetchCallArgs[0] as string;
+        const options = fetchCallArgs[1] as RequestInit;
 
         expect(url).toBe(`${BASE_URL}${path}`);
         expect(options.method).toBe("POST");
-        expect(options.headers["X-BAPI-API-KEY"]).toBe(API_KEY);
-        expect(options.headers["X-BAPI-TIMESTAMP"]).toBe(String(fixedTimestamp));
-        expect(options.headers["X-BAPI-RECV-WINDOW"]).toBe(String(RECV_WINDOW));
-        expect(options.headers["X-BAPI-SIGN"]).toBe(mockSignatureHex);
-        expect(options.headers["Content-Type"]).toBe("application/json");
+        expect(options.headers).toBeDefined();
+        const headers = options.headers as Record<string, string>; // Assert as Record
+        expect(headers["X-BAPI-API-KEY"]).toBe(API_KEY);
+        expect(headers["X-BAPI-TIMESTAMP"]).toBe(String(fixedTimestamp));
+        expect(headers["X-BAPI-RECV-WINDOW"]).toBe(String(RECV_WINDOW));
+        expect(headers["X-BAPI-SIGN"]).toBe(mockSignatureHex);
+        expect(headers["Content-Type"]).toBe("application/json");
         expect(options.body).toBe(paramsStr);
     });
 
@@ -183,7 +200,7 @@ describe("BybitClient (V5)", () => {
     test("setLeverage should call makeRequest with correct params", async () => {
         const symbol = "BTCUSDT";
         const leverage = 25;
-        const makeRequestSpy = jest.spyOn(client as any, 'makeRequest');
+        const makeRequestSpy = spyOn(client as any, 'makeRequest');
 
         await client.setLeverage(symbol, leverage);
 
@@ -197,7 +214,7 @@ describe("BybitClient (V5)", () => {
 
     test("executeTrade (Market Long) should call makeRequest with correct params", async () => {
         const params = { symbol: "ETHUSDT", side: "LONG", orderType: "MARKET", quantity: 0.5 };
-        const makeRequestSpy = jest.spyOn(client as any, 'makeRequest');
+        const makeRequestSpy = spyOn(client as any, 'makeRequest');
 
         await client.executeTrade(params);
 
@@ -213,7 +230,7 @@ describe("BybitClient (V5)", () => {
 
      test("executeTrade (Limit Close Short) should call makeRequest with correct params", async () => {
         const params = { symbol: "ETHUSDT", side: "CLOSE_SHORT", orderType: "LIMIT", quantity: 0.5, price: 2000 };
-        const makeRequestSpy = jest.spyOn(client as any, 'makeRequest');
+        const makeRequestSpy = spyOn(client as any, 'makeRequest');
 
         await client.executeTrade(params);
 
@@ -229,13 +246,13 @@ describe("BybitClient (V5)", () => {
     });
 
     test("getAccountInfo should call makeRequest correctly", async () => {
-        const makeRequestSpy = jest.spyOn(client as any, 'makeRequest');
+        const makeRequestSpy = spyOn(client as any, 'makeRequest');
         await client.getAccountInfo();
         expect(makeRequestSpy).toHaveBeenCalledWith('GET', '/v5/account/wallet-balance', { accountType: "UNIFIED" });
     });
 
      test("getPositions should call makeRequest correctly", async () => {
-        const makeRequestSpy = jest.spyOn(client as any, 'makeRequest');
+        const makeRequestSpy = spyOn(client as any, 'makeRequest');
         await client.getPositions("BTCUSDT");
         expect(makeRequestSpy).toHaveBeenCalledWith('GET', '/v5/position/list', { category: "linear", symbol: "BTCUSDT" });
     });
@@ -245,11 +262,9 @@ describe("BybitClient (V5)", () => {
     test("makeRequest should throw formatted error on non-zero retCode", async () => {
         const errorCode = 10001;
         const errorMsg = "Invalid API Key";
-        mockFetch.mockResolvedValueOnce({
-            ok: true, // Status might be 200 even if retCode is non-zero
-            json: async () => ({ retCode: errorCode, retMsg: errorMsg, result: {}, time: Date.now() }),
-            status: 200,
-        });
+        mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({
+            retCode: errorCode, retMsg: errorMsg, result: {}, time: Date.now()
+        }), { status: 200 })); // Status 200
 
         await expect((client as any).makeRequest('GET', '/v5/account/wallet-balance', { accountType: "UNIFIED" }))
             .rejects
@@ -259,11 +274,10 @@ describe("BybitClient (V5)", () => {
      test("makeRequest should handle non-200 status codes (though Bybit usually uses retCode)", async () => {
         // This test is less likely for Bybit V5 but good practice
         const errorMsg = "Gateway Timeout";
-        mockFetch.mockResolvedValueOnce({
-            ok: false,
-            json: async () => ({ retCode: 50400, retMsg: errorMsg }), // Simulate possible body
-            status: 504,
-        });
+        // Simulate possible body with non-200 status
+        mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({
+            retCode: 50400, retMsg: errorMsg
+        }), { status: 504 }));
 
         // Expect it to fail based on retCode primarily
          await expect((client as any).makeRequest('GET', '/v5/account/wallet-balance', { accountType: "UNIFIED" }))

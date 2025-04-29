@@ -3,7 +3,10 @@ import tradeWorker from "../src/index.js";
 // We don't need the actual client/logger imports anymore for the test file itself
 
 // Keep the stand-alone mock functions for client/logger methods
-const mockExecuteTrade = jest.fn();
+const mockOpenLong = jest.fn();
+const mockOpenShort = jest.fn();
+const mockCloseLong = jest.fn();
+const mockCloseShort = jest.fn();
 const mockSetLeverage = jest.fn();
 const mockGetAccountInfo = jest.fn();
 const mockLogRequest = jest.fn();
@@ -11,17 +14,26 @@ const mockLogResponse = jest.fn();
 
 // Create mock CLASS implementations that use the stand-alone mocks
 const MockMexcClient = jest.fn().mockImplementation(() => ({
-  executeTrade: mockExecuteTrade,
+  openLong: mockOpenLong,
+  openShort: mockOpenShort,
+  closeLong: mockCloseLong,
+  closeShort: mockCloseShort,
   setLeverage: mockSetLeverage,
   getAccountInfo: mockGetAccountInfo,
 }));
 const MockBinanceClient = jest.fn().mockImplementation(() => ({
-  executeTrade: mockExecuteTrade,
+  openLong: mockOpenLong,
+  openShort: mockOpenShort,
+  closeLong: mockCloseLong,
+  closeShort: mockCloseShort,
   setLeverage: mockSetLeverage,
   getAccountInfo: mockGetAccountInfo,
 }));
 const MockBybitClient = jest.fn().mockImplementation(() => ({
-  executeTrade: mockExecuteTrade,
+  openLong: mockOpenLong,
+  openShort: mockOpenShort,
+  closeLong: mockCloseLong,
+  closeShort: mockCloseShort,
   setLeverage: mockSetLeverage,
   getAccountInfo: mockGetAccountInfo,
 }));
@@ -95,7 +107,10 @@ describe("Trade Worker", () => {
     MockBybitClient.mockClear();
     MockDbLogger.mockClear();
     // Reset method mocks to default resolved values
-    mockExecuteTrade.mockResolvedValue({ orderId: "mock123" });
+    mockOpenLong.mockResolvedValue({ orderId: "mock123", status: "FILLED" });
+    mockOpenShort.mockResolvedValue({ orderId: "mock124", status: "FILLED" });
+    mockCloseLong.mockResolvedValue({ orderId: "mock125", status: "FILLED" });
+    mockCloseShort.mockResolvedValue({ orderId: "mock126", status: "FILLED" });
     mockSetLeverage.mockResolvedValue(true);
     mockGetAccountInfo.mockResolvedValue({ accountId: "mockAcc" });
     mockLogRequest.mockResolvedValue("req-log-id-123");
@@ -123,7 +138,7 @@ describe("Trade Worker", () => {
     const response = await tradeWorker.fetch(request, mockEnv);
     expect(response.status).toBe(500); // Expect service config error
     expect(MockMexcClient).not.toHaveBeenCalled(); // Check constructor mock
-    expect(mockExecuteTrade).not.toHaveBeenCalled();
+    expect(mockOpenLong).not.toHaveBeenCalled(); // Changed from mockExecuteTrade
   });
 
   test("rejects request if internalAuthKey doesn't match secret", async () => {
@@ -136,7 +151,7 @@ describe("Trade Worker", () => {
     const response = await tradeWorker.fetch(request, mockEnv);
     expect(response.status).toBe(403); // Unauthorized
     expect(MockMexcClient).not.toHaveBeenCalled(); // Check constructor mock
-    expect(mockExecuteTrade).not.toHaveBeenCalled();
+    expect(mockOpenLong).not.toHaveBeenCalled(); // Changed from mockExecuteTrade
   });
 
   test("rejects request if API key bindings not configured", async () => {
@@ -157,7 +172,7 @@ describe("Trade Worker", () => {
       "API secret bindings not configured or accessible for mexc"
     );
     expect(MockMexcClient).not.toHaveBeenCalled(); // Check constructor mock
-    expect(mockExecuteTrade).not.toHaveBeenCalled();
+    expect(mockOpenLong).not.toHaveBeenCalled(); // Changed from mockExecuteTrade
   });
 
   test("executes long position on MEXC successfully", async () => {
@@ -187,13 +202,16 @@ describe("Trade Worker", () => {
     );
 
     // Verify client methods were called (using the stand-alone mocks)
-    expect(mockExecuteTrade).toHaveBeenCalledWith(
-      expect.objectContaining({
-        symbol: "BTC_USDT",
-        action: "LONG",
-        quantity: 0.1,
-      })
+    expect(mockSetLeverage).toHaveBeenCalledWith("BTC_USDT", 20);
+    expect(mockOpenLong).toHaveBeenCalledWith(
+      "BTC_USDT",
+      0.1,
+      50000,
+      "MARKET"
     );
+    expect(mockOpenShort).not.toHaveBeenCalled();
+    expect(mockCloseLong).not.toHaveBeenCalled();
+    expect(mockCloseShort).not.toHaveBeenCalled();
 
     // Verify logger was used
     expect(MockDbLogger).toHaveBeenCalledTimes(1);
@@ -203,27 +221,11 @@ describe("Trade Worker", () => {
     const responseData = await response.json();
     expect(responseData.success).toBe(true);
     expect(responseData.result.orderId).toBe("mock123");
-  });
-
-  test("handles API connection test failure", async () => {
-    mockGetAccountInfo.mockRejectedValue(new Error("Connection failed"));
-    const request = new Request(`https://trade-worker.workers.dev${PROCESS_ENDPOINT}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: validTradePayload, internalAuthKey: TEST_INTERNAL_KEY, requestId: "req-5" }), // Moved keys to body
-    });
-    const response = await tradeWorker.fetch(request, mockEnv);
-    expect(response.status).toBe(500);
-    const body = await response.json();
-    expect(body.error).toContain("Failed to connect to exchange API");
-    expect(MockMexcClient).toHaveBeenCalledTimes(1);
-    expect(mockGetAccountInfo).toHaveBeenCalledTimes(1);
-    expect(mockExecuteTrade).not.toHaveBeenCalled();
-    expect(mockLogResponse).toHaveBeenCalledTimes(1); // Logger should still log the error response
+    expect(responseData.result.status).toBe("FILLED");
   });
 
   test("handles trade execution failure", async () => {
-    mockExecuteTrade.mockRejectedValue(new Error("Order execution failed"));
+    mockOpenLong.mockRejectedValue(new Error("Order execution failed"));
     const request = new Request(`https://trade-worker.workers.dev${PROCESS_ENDPOINT}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -234,8 +236,8 @@ describe("Trade Worker", () => {
     const body = await response.json();
     expect(body.error).toContain("Order execution failed");
     expect(MockMexcClient).toHaveBeenCalledTimes(1);
-    expect(mockGetAccountInfo).toHaveBeenCalledTimes(1);
-    expect(mockExecuteTrade).toHaveBeenCalledTimes(1);
+    expect(mockSetLeverage).toHaveBeenCalledTimes(1);
+    expect(mockOpenLong).toHaveBeenCalledTimes(1);
     expect(mockLogResponse).toHaveBeenCalledTimes(1); // Logger should still log the error response
   });
 

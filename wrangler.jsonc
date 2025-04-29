@@ -1,0 +1,38 @@
+{
+  "name": "trade-worker",
+  "account_id": "profile", // Assuming this is correct, keep if needed or remove if default
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-07", // Standardized
+  "compatibility_flags": ["nodejs_compat"], // Standardized
+  "observability": { // Standardized
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    // Secrets must be created via `wrangler secret put`
+    // The values here are placeholders and will be populated from secrets
+    "INTERNAL_KEY_BINDING": null,
+    "MEXC_KEY_BINDING": null,
+    "MEXC_SECRET_BINDING": null,
+    "BINANCE_KEY_BINDING": null,
+    "BINANCE_SECRET_BINDING": null,
+    "BYBIT_KEY_BINDING": null,
+    "BYBIT_SECRET_BINDING": null
+  },
+  "services": [
+    {
+      "binding": "D1_SERVICE",
+      "service": "d1-worker"
+      // Add environment if needed, e.g., "environment": "production"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CONFIG_KV",
+      "id": "c5917667a21745e390ff969f32b1847d"
+      // "preview_id": "<YOUR_PREVIEW_ID>" // Add preview ID for local dev/testing
+    }
+  ]
+  // Note: Removed secrets_store_secrets definition. Secrets are now declared in vars and expected via `wrangler secret put`.
+  // Note: Removed commented-out D1_WORKER_URL var.
+} 

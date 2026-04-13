@@ -6,8 +6,8 @@ import type { KVNamespace } from "@cloudflare/workers-types"; // Import KVNamesp
 import { logKvTimestamp, type EnvWithKV } from "../../src/utils/kvUtils"; // Original relative path
 import type { R2Bucket } from "@cloudflare/workers-types"; // Import R2Bucket type
 import { ExecutionContext } from "@cloudflare/workers"; // Import ExecutionContext
-import type { Ai } from '@cloudflare/ai'; // Import the Ai type
-import type { D1Database } from '@cloudflare/workers-types'; // Import D1Database type
+import type { Ai } from "@cloudflare/ai"; // Import the Ai type
+import type { D1Database } from "@cloudflare/workers-types"; // Import D1Database type
 
 // --- Type Definitions ---
 
@@ -97,7 +97,7 @@ interface TradeSignalRecord {
   signal_id: string; // UUID
   timestamp: number; // Unix timestamp
   symbol: string;
-  signal_type: 'BUY' | 'SELL' | 'HOLD' | 'CLOSE' | string; // Allow other types
+  signal_type: "BUY" | "SELL" | "HOLD" | "CLOSE" | string; // Allow other types
   source?: string;
   raw_data?: string; // JSON stringified payload
 }
@@ -111,21 +111,25 @@ const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
 // --- Worker Definition ---
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<Response> {
     const url = new URL(request.url);
 
     // Call the shared KV logging function
     // await logKvTimestamp(env); // Temporarily commented out due to test module resolution issues
 
-    // --- Add GET endpoint for retrieving R2 reports --- 
+    // --- Add GET endpoint for retrieving R2 reports ---
     if (request.method === "GET" && url.pathname === "/report") {
       return await handleGetReportRequest(request, env);
     } else if (url.pathname === SIGNALS_ENDPOINT) {
       // Handle GET and POST for D1 signals
       if (request.method === "GET") {
-          return await handleGetSignalsRequest(request, env);
+        return await handleGetSignalsRequest(request, env);
       } else if (request.method === "POST") {
-          return await handlePostSignalRequest(request, env);
+        return await handlePostSignalRequest(request, env);
       }
     }
     // --- End R2 report endpoint ---
@@ -165,12 +169,12 @@ export async function validateApiCredentials(
   ): Promise<boolean> => {
     if (!keyBinding || !secretBinding) return false;
     try {
-        const key = await keyBinding.get();
-        const secret = await secretBinding.get();
-        return key !== null && secret !== null;
+      const key = await keyBinding.get();
+      const secret = await secretBinding.get();
+      return key !== null && secret !== null;
     } catch (e) {
-        console.error(`Error getting secret binding for ${exchange}:`, e);
-        return false;
+      console.error(`Error getting secret binding for ${exchange}:`, e);
+      return false;
     }
   };
 
@@ -183,7 +187,10 @@ export async function validateApiCredentials(
         env.BINANCE_SECRET_BINDING
       );
     case "bybit":
-      return await checkBinding(env.BYBIT_KEY_BINDING, env.BYBIT_SECRET_BINDING);
+      return await checkBinding(
+        env.BYBIT_KEY_BINDING,
+        env.BYBIT_SECRET_BINDING
+      );
     default:
       return false;
   }
@@ -192,32 +199,55 @@ export async function validateApiCredentials(
 /**
  * Validates the core trade payload structure and content.
  */
-export function validateTradePayload(payload: any): ValidationResult { // Use any initially, then refine
-    if (!payload || typeof payload !== 'object') {
-        return { isValid: false, error: "Invalid or missing payload" };
-    }
+export function validateTradePayload(payload: any): ValidationResult {
+  // Use any initially, then refine
+  if (!payload || typeof payload !== "object") {
+    return { isValid: false, error: "Invalid or missing payload" };
+  }
 
   const { exchange, action, symbol, quantity } = payload as WebhookPayload;
 
-  if (!exchange || !action || !symbol || quantity === undefined || quantity === null) {
+  if (
+    !exchange ||
+    !action ||
+    !symbol ||
+    quantity === undefined ||
+    quantity === null
+  ) {
     return { isValid: false, error: "Missing required fields in payload" };
   }
 
-  const validActions: WebhookPayload['action'][] = ["LONG", "SHORT", "CLOSE_LONG", "CLOSE_SHORT"];
-  if (!validActions.includes(action.toUpperCase() as WebhookPayload['action'])) {
+  const validActions: WebhookPayload["action"][] = [
+    "LONG",
+    "SHORT",
+    "CLOSE_LONG",
+    "CLOSE_SHORT",
+  ];
+  if (
+    !validActions.includes(action.toUpperCase() as WebhookPayload["action"])
+  ) {
     return { isValid: false, error: `Invalid action in payload: ${action}` };
   }
 
-  if (typeof quantity !== 'number' || isNaN(quantity) || quantity <= 0) {
+  if (typeof quantity !== "number" || isNaN(quantity) || quantity <= 0) {
     return { isValid: false, error: "Invalid quantity in payload" };
   }
 
   // Add further checks (e.g., price/leverage types if present)
-  if (payload.price !== undefined && (typeof payload.price !== 'number' || isNaN(payload.price))) {
-      return { isValid: false, error: "Invalid price in payload" };
+  if (
+    payload.price !== undefined &&
+    (typeof payload.price !== "number" || isNaN(payload.price))
+  ) {
+    return { isValid: false, error: "Invalid price in payload" };
   }
-   if (payload.leverage !== undefined && (typeof payload.leverage !== 'number' || isNaN(payload.leverage) || !Number.isInteger(payload.leverage) || payload.leverage <= 0)) {
-      return { isValid: false, error: "Invalid leverage in payload" };
+  if (
+    payload.leverage !== undefined &&
+    (typeof payload.leverage !== "number" ||
+      isNaN(payload.leverage) ||
+      !Number.isInteger(payload.leverage) ||
+      payload.leverage <= 0)
+  ) {
+    return { isValid: false, error: "Invalid leverage in payload" };
   }
 
   return { isValid: true };
@@ -247,28 +277,34 @@ export async function saveReportToR2(
   env: Env
 ): Promise<void> {
   if (!env.REPORTS_BUCKET) {
-    console.error(`[${dbLogId}] REPORTS_BUCKET binding is not configured. Skipping report save.`);
+    console.error(
+      `[${dbLogId}] REPORTS_BUCKET binding is not configured. Skipping report save.`
+    );
     return;
   }
 
   try {
     // Format a simple report (can be expanded later)
-    const reportContent = JSON.stringify({ 
-      timestamp: new Date().toISOString(),
-      tradePayload: payload,
-      tradeResult: reportData,
-      dbLogId: dbLogId, 
-    }, null, 2);
+    const reportContent = JSON.stringify(
+      {
+        timestamp: new Date().toISOString(),
+        tradePayload: payload,
+        tradeResult: reportData,
+        dbLogId: dbLogId,
+      },
+      null,
+      2
+    );
 
     // Generate a unique filename
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-"); // Filesystem-friendly timestamp
-    const filename = `trade-reports/${payload.exchange}/${payload.symbol}/${timestamp}-${dbLogId || 'no-id'}.json`;
+    const filename = `trade-reports/${payload.exchange}/${payload.symbol}/${timestamp}-${dbLogId || "no-id"}.json`;
 
     console.log(`[${dbLogId}] Attempting to save report to R2: ${filename}`);
 
     // Put the object into the R2 bucket
     const r2Object = await env.REPORTS_BUCKET.put(filename, reportContent, {
-      httpMetadata: { contentType: 'application/json' },
+      httpMetadata: { contentType: "application/json" },
       // Optionally add custom metadata
       // customMetadata: {
       //   exchange: payload.exchange,
@@ -277,11 +313,18 @@ export async function saveReportToR2(
       // },
     });
 
-    console.log(`[${dbLogId}] Successfully saved report to R2. ETag: ${r2Object?.etag}`);
-
+    console.log(
+      `[${dbLogId}] Successfully saved report to R2. ETag: ${r2Object?.etag}`
+    );
   } catch (error: unknown) {
-    const errorMsg = error instanceof Error ? error.message : String(error || "Unknown R2 error");
-    console.error(`[${dbLogId}] Failed to save report to R2: ${errorMsg}`, error);
+    const errorMsg =
+      error instanceof Error
+        ? error.message
+        : String(error || "Unknown R2 error");
+    console.error(
+      `[${dbLogId}] Failed to save report to R2: ${errorMsg}`,
+      error
+    );
     // Decide if this error should trigger an alert or other action
   }
 }
@@ -306,13 +349,16 @@ async function executeTrade(
       quantity,
       price,
       orderType = "MARKET",
-      leverage = 20,
+      leverage,
     } = payload;
 
     if (!(await validateApiCredentials(exchange, env))) {
       const errorMsg = `API secret bindings not configured or accessible for ${exchange}`;
       console.error(errorMsg);
-      const response = createJsonResponse({ success: false, error: errorMsg }, 400);
+      const response = createJsonResponse(
+        { success: false, error: errorMsg },
+        400
+      );
       await dbLogger.logResponse(dbLogId, response, null, startTime);
       return response;
     }
@@ -330,19 +376,22 @@ async function executeTrade(
       case "mexc":
         apiKey = (await env.MEXC_KEY_BINDING?.get()) ?? null;
         apiSecret = (await env.MEXC_SECRET_BINDING?.get()) ?? null;
-        if (!apiKey || !apiSecret) throw new Error("MEXC API secrets unavailable.");
+        if (!apiKey || !apiSecret)
+          throw new Error("MEXC API secrets unavailable.");
         client = new MexcClientClass(apiKey, apiSecret);
         break;
       case "binance":
         apiKey = (await env.BINANCE_KEY_BINDING?.get()) ?? null;
         apiSecret = (await env.BINANCE_SECRET_BINDING?.get()) ?? null;
-        if (!apiKey || !apiSecret) throw new Error("Binance API secrets unavailable.");
+        if (!apiKey || !apiSecret)
+          throw new Error("Binance API secrets unavailable.");
         client = new BinanceClientClass(apiKey, apiSecret);
         break;
       case "bybit":
         apiKey = (await env.BYBIT_KEY_BINDING?.get()) ?? null;
         apiSecret = (await env.BYBIT_SECRET_BINDING?.get()) ?? null;
-        if (!apiKey || !apiSecret) throw new Error("Bybit API secrets unavailable.");
+        if (!apiKey || !apiSecret)
+          throw new Error("Bybit API secrets unavailable.");
         client = new BybitClientClass(apiKey, apiSecret);
         break;
       default:
@@ -350,7 +399,12 @@ async function executeTrade(
     }
 
     if (client.setLeverage && leverage) {
-      await client.setLeverage(symbol, leverage);
+      try {
+        await client.setLeverage(symbol, leverage);
+      } catch (leverageError) {
+        console.error(`Failed to set leverage:`, leverageError);
+        // Continue with trade execution even if setting leverage fails
+      }
     }
 
     let result: any;
@@ -371,7 +425,11 @@ async function executeTrade(
     }
 
     console.log("Trade execution successful:", result);
-    const response = createJsonResponse({ success: true, result: result, error: null });
+    const response = createJsonResponse({
+      success: true,
+      result: result,
+      error: null,
+    });
     await dbLogger.logResponse(dbLogId, response, null, startTime);
 
     // --- Task 10.5: Example Inter-Worker Communication ---
@@ -395,7 +453,9 @@ async function executeTrade(
         }
       );
 
-      console.log(`[${dbLogId}] Calling TELEGRAM_API service binding for notification...`);
+      console.log(
+        `[${dbLogId}] Calling TELEGRAM_API service binding for notification...`
+      );
       // const notificationResponse = await env.TELEGRAM_API.fetch(telegramWorkerRequest);
       // if (!notificationResponse.ok) {
       //   console.error(
@@ -406,18 +466,29 @@ async function executeTrade(
       // else {
       //    console.log(`[${dbLogId}] Notification sent via TELEGRAM_API.`);
       // }
-      console.log(`[${dbLogId}] Skipped calling TELEGRAM_API for notification (placeholder).`); // Placeholder log
-
+      console.log(
+        `[${dbLogId}] Skipped calling TELEGRAM_API for notification (placeholder).`
+      ); // Placeholder log
     } catch (notificationError: unknown) {
-       const errorMsg = notificationError instanceof Error ? notificationError.message : String(notificationError || "Unknown notification error");
-       console.error(`[${dbLogId}] Exception calling TELEGRAM_API for notification:`, errorMsg, notificationError);
-       // Log error, but don't fail the trade response
+      const errorMsg =
+        notificationError instanceof Error
+          ? notificationError.message
+          : String(notificationError || "Unknown notification error");
+      console.error(
+        `[${dbLogId}] Exception calling TELEGRAM_API for notification:`,
+        errorMsg,
+        notificationError
+      );
+      // Log error, but don't fail the trade response
     }
     // --- End Task 10.5 ---
 
     return response;
   } catch (error: unknown) {
-    const errorMsg = error instanceof Error ? error.message : String(error || "Internal server error");
+    const errorMsg =
+      error instanceof Error
+        ? error.message
+        : String(error || "Internal server error");
     console.error("Error in executeTrade:", errorMsg, error);
     const response = createJsonResponse(
       { success: false, error: `Trade execution failed: ${errorMsg}` },
@@ -425,11 +496,11 @@ async function executeTrade(
     );
     // Log failure response, even if dbLogId might be null in edge cases
     if (dbLogger && dbLogId !== null) {
-        try {
-            await dbLogger.logResponse(dbLogId, response, null, startTime);
-        } catch (logErr) {
-            console.error("Failed to log error response to D1:", logErr);
-        }
+      try {
+        await dbLogger.logResponse(dbLogId, response, null, startTime);
+      } catch (logErr) {
+        console.error("Failed to log error response to D1:", logErr);
+      }
     }
     return response;
   }
@@ -440,13 +511,18 @@ async function executeTrade(
 /**
  * Handles POST requests to the /webhook endpoint (from service bindings).
  */
-async function handleWebhookRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handleWebhookRequest(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const startTime = Date.now();
   // Use mock or real DbLogger
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
   const dbLogger = new DbLoggerClass(env);
   let dbLogId: number | null = null;
-  const incomingRequestId = request.headers.get("X-Request-ID") || crypto.randomUUID();
+  const incomingRequestId =
+    request.headers.get("X-Request-ID") || crypto.randomUUID();
 
   try {
     const payload: WebhookPayload = await request.json();
@@ -455,53 +531,80 @@ async function handleWebhookRequest(request: Request, env: Env, ctx: ExecutionCo
 
     // Assuming logRequest can handle the payload directly and returns a number ID
     // Might need adjustment based on DbLogger implementation
-    dbLogId = await dbLogger.logRequest(request, payload); 
+    dbLogId = await dbLogger.logRequest(request, payload);
 
     const validation = validateTradePayload(payload);
     if (!validation.isValid) {
-      const response = createJsonResponse({ success: false, error: validation.error }, 400);
+      const response = createJsonResponse(
+        { success: false, error: validation.error },
+        400
+      );
       await dbLogger.logResponse(dbLogId, response, null, startTime);
       return response;
     }
 
     // *** Call executeTrade ***
-    const tradeResponse = await executeTrade(payload, env, dbLogger, startTime, dbLogId);
+    const tradeResponse = await executeTrade(
+      payload,
+      env,
+      dbLogger,
+      startTime,
+      dbLogId
+    );
 
     // --- Task 3.5: Save Report on Success ---
-    if (tradeResponse.ok) { // Check if trade execution itself was successful
+    if (tradeResponse.ok) {
+      // Check if trade execution itself was successful
       try {
-        const tradeResult = await tradeResponse.json(); // Need the result for the report
+        const tradeResult = (await tradeResponse.clone().json()) as any; // Need the result for the report
         if (tradeResult.success) {
-            console.log(`[${incomingRequestId}] Trade successful, queueing report save to R2.`);
-            ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
+          console.log(
+            `[${incomingRequestId}] Trade successful, queueing report save to R2.`
+          );
+          ctx.waitUntil(
+            saveReportToR2(tradeResult.result, payload, dbLogId, env)
+          );
         } else {
-            console.log(`[${incomingRequestId}] Trade execution reported failure, skipping R2 report save.`);
+          console.log(
+            `[${incomingRequestId}] Trade execution reported failure, skipping R2 report save.`
+          );
         }
-      } catch(e) {
-         console.error(`[${incomingRequestId}] Failed to parse trade response for R2 reporting:`, e);
+      } catch (e) {
+        console.error(
+          `[${incomingRequestId}] Failed to parse trade response for R2 reporting:`,
+          e
+        );
       }
     }
     // --- End Task 3.5 ---
 
     return tradeResponse; // Return the original trade response
-
   } catch (error: any) {
-    console.error(`Error in handleWebhookRequest for ID ${incomingRequestId}:`, error);
-    const response = createJsonResponse({
-      success: false,
-      error: error.message || "Failed to process webhook request",
-    }, 500);
+    console.error(
+      `Error in handleWebhookRequest for ID ${incomingRequestId}:`,
+      error
+    );
+    const response = createJsonResponse(
+      {
+        success: false,
+        error: error.message || "Failed to process webhook request",
+      },
+      500
+    );
     // Log error response if dbLogId was obtained
     if (dbLogId !== null) {
-       await dbLogger.logResponse(dbLogId, response, error, startTime);
+      await dbLogger.logResponse(dbLogId, response, error, startTime);
     } else {
-        try {
-            const rawBody = await request.clone().text();
-            dbLogId = await dbLogger.logRequest(request, rawBody); // Log raw body
-            await dbLogger.logResponse(dbLogId, response, error, startTime);
-        } catch (logError) {
-            console.error("Failed to log error response after initial failure:", logError);
-        }
+      try {
+        const rawBody = await request.clone().text();
+        dbLogId = await dbLogger.logRequest(request, rawBody); // Log raw body
+        await dbLogger.logResponse(dbLogId, response, error, startTime);
+      } catch (logError) {
+        console.error(
+          "Failed to log error response after initial failure:",
+          logError
+        );
+      }
     }
     return response;
   }
@@ -510,7 +613,11 @@ async function handleWebhookRequest(request: Request, env: Env, ctx: ExecutionCo
 /**
  * Handles the standardized processing request (/process endpoint).
  */
-async function handleProcessRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handleProcessRequest(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const startTime = Date.now();
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
   const dbLogger = new DbLoggerClass(env);
@@ -523,81 +630,124 @@ async function handleProcessRequest(request: Request, env: Env, ctx: ExecutionCo
     const internalAuthKey = data?.internalAuthKey;
 
     console.log(`Processing /process request ID: ${incomingRequestId}`);
-    console.log("Received standardized request:", JSON.stringify(data, null, 2));
+    console.log(
+      "Received standardized request:",
+      JSON.stringify(data, null, 2)
+    );
 
     // Log the request *before* authentication check
     // Pass the full original body data for logging
-    dbLogId = await dbLogger.logRequest(request, data); 
+    dbLogId = await dbLogger.logRequest(request, data);
 
     const expectedInternalKey = await env.INTERNAL_KEY_BINDING?.get();
 
     if (!expectedInternalKey) {
-      console.error("INTERNAL_KEY_BINDING binding not configured or accessible.");
-      const response = createJsonResponse({ success: false, error: "Service configuration error" }, 500);
+      console.error(
+        "INTERNAL_KEY_BINDING binding not configured or accessible."
+      );
+      const response = createJsonResponse(
+        { success: false, error: "Service configuration error" },
+        500
+      );
       await dbLogger.logResponse(dbLogId, response, null, startTime);
       return response;
     }
 
     if (!internalAuthKey || internalAuthKey !== expectedInternalKey) {
-      console.warn(`Authentication failed for request ID: ${incomingRequestId}`);
-      const response = createJsonResponse({ success: false, error: "Authentication failed" }, 403);
+      console.warn(
+        `Authentication failed for request ID: ${incomingRequestId}`
+      );
+      const response = createJsonResponse(
+        { success: false, error: "Authentication failed" },
+        403
+      );
       await dbLogger.logResponse(dbLogId, response, null, startTime);
       return response;
     }
 
     const payload = data?.payload;
     if (!payload) {
-      const response = createJsonResponse({ success: false, error: "Missing payload in request" }, 400);
+      const response = createJsonResponse(
+        { success: false, error: "Missing payload in request" },
+        400
+      );
       await dbLogger.logResponse(dbLogId, response, null, startTime);
       return response;
     }
 
     const validation = validateTradePayload(payload);
     if (!validation.isValid) {
-      const response = createJsonResponse({ success: false, error: validation.error }, 400);
+      const response = createJsonResponse(
+        { success: false, error: validation.error },
+        400
+      );
       await dbLogger.logResponse(dbLogId, response, null, startTime);
       return response;
     }
 
     // *** Call executeTrade ***
-    const tradeResponse = await executeTrade(payload, env, dbLogger, startTime, dbLogId);
+    const tradeResponse = await executeTrade(
+      payload,
+      env,
+      dbLogger,
+      startTime,
+      dbLogId
+    );
 
     // --- Task 3.5: Save Report on Success ---
-    if (tradeResponse.ok) { // Check if trade execution itself was successful
+    if (tradeResponse.ok) {
+      // Check if trade execution itself was successful
       try {
-        const tradeResult = await tradeResponse.json(); // Need the result for the report
+        const tradeResult = (await tradeResponse.clone().json()) as any; // Need the result for the report
         if (tradeResult.success) {
-            console.log(`[${incomingRequestId}] Trade successful, queueing report save to R2.`);
-            ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
+          console.log(
+            `[${incomingRequestId}] Trade successful, queueing report save to R2.`
+          );
+          ctx.waitUntil(
+            saveReportToR2(tradeResult.result, payload, dbLogId, env)
+          );
         } else {
-            console.log(`[${incomingRequestId}] Trade execution reported failure, skipping R2 report save.`);
+          console.log(
+            `[${incomingRequestId}] Trade execution reported failure, skipping R2 report save.`
+          );
         }
-      } catch(e) {
-         console.error(`[${incomingRequestId}] Failed to parse trade response for R2 reporting:`, e);
+      } catch (e) {
+        console.error(
+          `[${incomingRequestId}] Failed to parse trade response for R2 reporting:`,
+          e
+        );
       }
     }
     // --- End Task 3.5 ---
 
     return tradeResponse; // Return the original trade response
-
   } catch (error: any) {
-    console.error(`Error in handleProcessRequest for ID ${incomingRequestId}:`, error);
-    const response = createJsonResponse({
-      success: false,
-      error: error.message || "Failed to process request",
-    }, 500);
+    console.error(
+      `Error in handleProcessRequest for ID ${incomingRequestId}:`,
+      error
+    );
+    const response = createJsonResponse(
+      {
+        success: false,
+        error: error.message || "Failed to process request",
+      },
+      500
+    );
     // Log error response if dbLogId was obtained
     if (dbLogId !== null) {
-       await dbLogger.logResponse(dbLogId, response, error, startTime);
+      await dbLogger.logResponse(dbLogId, response, error, startTime);
     } else {
-        // Attempt to log the raw request if logging failed earlier
-        try {
-            const rawBody = await request.clone().text();
-             dbLogId = await dbLogger.logRequest(request, rawBody); // Log raw body
-             await dbLogger.logResponse(dbLogId, response, error, startTime);
-        } catch (logError) {
-            console.error("Failed to log error response after initial failure:", logError);
-        }
+      // Attempt to log the raw request if logging failed earlier
+      try {
+        const rawBody = await request.clone().text();
+        dbLogId = await dbLogger.logRequest(request, rawBody); // Log raw body
+        await dbLogger.logResponse(dbLogId, response, error, startTime);
+      } catch (logError) {
+        console.error(
+          "Failed to log error response after initial failure:",
+          logError
+        );
+      }
     }
     return response;
   }
@@ -608,48 +758,57 @@ async function handleProcessRequest(request: Request, env: Env, ctx: ExecutionCo
  * Expects a 'key' query parameter specifying the R2 object key.
  * Task 3.5
  */
-async function handleGetReportRequest(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    const key = url.searchParams.get("key");
+async function handleGetReportRequest(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const url = new URL(request.url);
+  const key = url.searchParams.get("key");
 
-    if (!key) {
-        return new Response("Missing 'key' query parameter", { status: 400 });
+  if (!key) {
+    return new Response("Missing 'key' query parameter", { status: 400 });
+  }
+
+  if (!env.REPORTS_BUCKET) {
+    console.error("REPORTS_BUCKET binding is not configured.");
+    return new Response("R2 service not configured.", { status: 500 });
+  }
+
+  try {
+    console.log(`Attempting to retrieve R2 object with key: ${key}`);
+    const object = await env.REPORTS_BUCKET.get(key);
+
+    if (object === null) {
+      console.log(`R2 object not found for key: ${key}`);
+      return new Response("Report not found", { status: 404 });
     }
 
-    if (!env.REPORTS_BUCKET) {
-        console.error("REPORTS_BUCKET binding is not configured.");
-        return new Response("R2 service not configured.", { status: 500 });
-    }
+    console.log(
+      `Successfully retrieved R2 object: ${key}, Size: ${object.size}`
+    );
 
-    try {
-        console.log(`Attempting to retrieve R2 object with key: ${key}`);
-        const object = await env.REPORTS_BUCKET.get(key);
+    // Prepare headers for the response
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set("etag", object.httpEtag);
+    // Optional: Set Content-Disposition to suggest a filename
+    // const filename = key.split('/').pop() || 'download';
+    // headers.set('content-disposition', `attachment; filename="${filename}"`);
 
-        if (object === null) {
-            console.log(`R2 object not found for key: ${key}`);
-            return new Response("Report not found", { status: 404 });
-        }
-
-        console.log(`Successfully retrieved R2 object: ${key}, Size: ${object.size}`);
-
-        // Prepare headers for the response
-        const headers = new Headers();
-        object.writeHttpMetadata(headers);
-        headers.set('etag', object.httpEtag);
-        // Optional: Set Content-Disposition to suggest a filename
-        // const filename = key.split('/').pop() || 'download';
-        // headers.set('content-disposition', `attachment; filename="${filename}"`);
-
-        // Stream the body back
-        return new Response(object.body, {
-            headers,
-        });
-
-    } catch (error: unknown) {
-        const errorMsg = error instanceof Error ? error.message : String(error || "Unknown R2 get error");
-        console.error(`Failed to retrieve R2 object ${key}: ${errorMsg}`, error);
-        return new Response(`Failed to retrieve report: ${errorMsg}`, { status: 500 });
-    }
+    // Stream the body back
+    return new Response(object.body, {
+      headers,
+    });
+  } catch (error: unknown) {
+    const errorMsg =
+      error instanceof Error
+        ? error.message
+        : String(error || "Unknown R2 get error");
+    console.error(`Failed to retrieve R2 object ${key}: ${errorMsg}`, error);
+    return new Response(`Failed to retrieve report: ${errorMsg}`, {
+      status: 500,
+    });
+  }
 }
 
 /**
@@ -658,37 +817,48 @@ async function handleGetReportRequest(request: Request, env: Env): Promise<Respo
  * REMOVE OR SECURE BEFORE PRODUCTION.
  */
 async function handleAiTest(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    const prompt = url.searchParams.get("prompt");
+  const url = new URL(request.url);
+  const prompt = url.searchParams.get("prompt");
 
-    if (!prompt) {
-        return createJsonResponse({ success: false, error: "Missing 'prompt' query parameter" }, 400);
-    }
+  if (!prompt) {
+    return createJsonResponse(
+      { success: false, error: "Missing 'prompt' query parameter" },
+      400
+    );
+  }
 
-    if (!env.AI) {
-        console.error("AI binding is not configured in the environment.");
-        return createJsonResponse({ success: false, error: "AI service not available." }, 500);
-    }
+  if (!env.AI) {
+    console.error("AI binding is not configured in the environment.");
+    return createJsonResponse(
+      { success: false, error: "AI service not available." },
+      500
+    );
+  }
 
-    try {
-        console.log(`Sending prompt to AI: "${prompt}"`);
+  try {
+    console.log(`Sending prompt to AI: "${prompt}"`);
 
-        // Basic call to the LLM
-        const response = await env.AI.run('@cf/meta/llama-3-8b-instruct', { 
-            messages: [
-                { role: 'system', content: 'You are a trading assistant.' }, // Adjusted system prompt
-                { role: 'user', content: prompt }
-            ]
-         });
+    // Basic call to the LLM
+    const response = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+      messages: [
+        { role: "system", content: "You are a trading assistant." }, // Adjusted system prompt
+        { role: "user", content: prompt },
+      ],
+    });
 
-        console.log("Received AI response.");
-        return createJsonResponse({ success: true, result: response }, 200);
-
-    } catch (error: unknown) {
-        const errorMsg = error instanceof Error ? error.message : String(error || "Unknown AI error");
-        console.error(`Error calling AI: ${errorMsg}`, error);
-        return createJsonResponse({ success: false, error: `AI request failed: ${errorMsg}` }, 500);
-    }
+    console.log("Received AI response.");
+    return createJsonResponse({ success: true, result: response }, 200);
+  } catch (error: unknown) {
+    const errorMsg =
+      error instanceof Error
+        ? error.message
+        : String(error || "Unknown AI error");
+    console.error(`Error calling AI: ${errorMsg}`, error);
+    return createJsonResponse(
+      { success: false, error: `AI request failed: ${errorMsg}` },
+      500
+    );
+  }
 }
 
 // --- D1 Helper Functions ---
@@ -696,38 +866,46 @@ async function handleAiTest(request: Request, env: Env): Promise<Response> {
 /**
  * Inserts a trade signal into the D1 database.
  */
-async function insertSignal(signal: TradeSignalRecord, env: Env): Promise<D1Result> {
-    if (!env.DB) {
-        throw new Error("D1 Database (DB) binding not configured.");
-    }
-    const stmt = env.DB.prepare(
-        `INSERT INTO trade_signals (signal_id, timestamp, symbol, signal_type, source, raw_data) 
+async function insertSignal(
+  signal: TradeSignalRecord,
+  env: Env
+): Promise<D1Result> {
+  if (!env.DB) {
+    throw new Error("D1 Database (DB) binding not configured.");
+  }
+  const stmt = env.DB.prepare(
+    `INSERT INTO trade_signals (signal_id, timestamp, symbol, signal_type, source, raw_data) 
          VALUES (?, ?, ?, ?, ?, ?)`
-    );
-    return await stmt.bind(
-        signal.signal_id,
-        signal.timestamp,
-        signal.symbol,
-        signal.signal_type,
-        signal.source ?? null, // Use null if source is undefined
-        signal.raw_data ?? null // Use null if raw_data is undefined
-    ).run();
+  );
+  return await stmt
+    .bind(
+      signal.signal_id,
+      signal.timestamp,
+      signal.symbol,
+      signal.signal_type,
+      signal.source ?? null, // Use null if source is undefined
+      signal.raw_data ?? null // Use null if raw_data is undefined
+    )
+    .run();
 }
 
 /**
  * Retrieves recent trade signals from the D1 database.
  */
-async function getRecentSignals(env: Env, limit: number = 10): Promise<D1Result<TradeSignalRecord>> {
-     if (!env.DB) {
-        throw new Error("D1 Database (DB) binding not configured.");
-    }
-    const stmt = env.DB.prepare(
-        `SELECT signal_id, timestamp, symbol, signal_type, source, processed_at 
+async function getRecentSignals(
+  env: Env,
+  limit: number = 10
+): Promise<D1Result<TradeSignalRecord>> {
+  if (!env.DB) {
+    throw new Error("D1 Database (DB) binding not configured.");
+  }
+  const stmt = env.DB.prepare(
+    `SELECT signal_id, timestamp, symbol, signal_type, source, processed_at 
          FROM trade_signals 
          ORDER BY processed_at DESC 
          LIMIT ?`
-    );
-    return await stmt.bind(limit).all<TradeSignalRecord>();
+  );
+  return await stmt.bind(limit).all<TradeSignalRecord>();
 }
 
 // --- Request Handlers for D1 ---
@@ -735,60 +913,104 @@ async function getRecentSignals(env: Env, limit: number = 10): Promise<D1Result<
 /**
  * Handles POST requests to insert a new trade signal into D1.
  */
-async function handlePostSignalRequest(request: Request, env: Env): Promise<Response> {
-    let signalPayload: any;
-    try {
-        signalPayload = await request.json();
-    } catch (e) {
-        return createJsonResponse({ success: false, error: "Invalid JSON payload" }, 400);
-    }
+async function handlePostSignalRequest(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  let signalPayload: any;
+  try {
+    signalPayload = await request.json();
+  } catch (e) {
+    return createJsonResponse(
+      { success: false, error: "Invalid JSON payload" },
+      400
+    );
+  }
 
-    // Basic validation (expand as needed)
-    if (!signalPayload.symbol || !signalPayload.signal_type || !signalPayload.timestamp) {
-        return createJsonResponse({ success: false, error: "Missing required fields: symbol, signal_type, timestamp" }, 400);
-    }
+  // Basic validation (expand as needed)
+  if (
+    !signalPayload.symbol ||
+    !signalPayload.signal_type ||
+    !signalPayload.timestamp
+  ) {
+    return createJsonResponse(
+      {
+        success: false,
+        error: "Missing required fields: symbol, signal_type, timestamp",
+      },
+      400
+    );
+  }
 
-    const signalRecord: TradeSignalRecord = {
-        signal_id: crypto.randomUUID(), // Generate a unique ID
-        timestamp: signalPayload.timestamp, // Assume provided timestamp is correct
-        symbol: signalPayload.symbol,
-        signal_type: signalPayload.signal_type,
-        source: signalPayload.source,
-        raw_data: JSON.stringify(signalPayload) // Store the whole payload as raw data
-    };
+  const signalRecord: TradeSignalRecord = {
+    signal_id: crypto.randomUUID(), // Generate a unique ID
+    timestamp: signalPayload.timestamp, // Assume provided timestamp is correct
+    symbol: signalPayload.symbol,
+    signal_type: signalPayload.signal_type,
+    source: signalPayload.source,
+    raw_data: JSON.stringify(signalPayload), // Store the whole payload as raw data
+  };
 
-    try {
-        const result = await insertSignal(signalRecord, env);
-        if (result.success) {
-            console.log(`Successfully inserted signal ID: ${signalRecord.signal_id}`);
-            return createJsonResponse({ success: true, result: { signalId: signalRecord.signal_id } }, 201); // 201 Created
-        } else {
-            console.error("D1 insert failed:", result.error);
-            return createJsonResponse({ success: false, error: "Failed to store signal in database." }, 500);
-        }
-    } catch (error) {
-        console.error("Error inserting signal into D1:", error);
-        return createJsonResponse({ success: false, error: "Internal server error while storing signal." }, 500);
+  try {
+    const result = await insertSignal(signalRecord, env);
+    if (result.success) {
+      console.log(`Successfully inserted signal ID: ${signalRecord.signal_id}`);
+      return createJsonResponse(
+        { success: true, result: { signalId: signalRecord.signal_id } },
+        201
+      ); // 201 Created
+    } else {
+      console.error("D1 insert failed:", result.error);
+      return createJsonResponse(
+        { success: false, error: "Failed to store signal in database." },
+        500
+      );
     }
+  } catch (error) {
+    console.error("Error inserting signal into D1:", error);
+    return createJsonResponse(
+      { success: false, error: "Internal server error while storing signal." },
+      500
+    );
+  }
 }
 
 /**
  * Handles GET requests to retrieve recent trade signals from D1.
  */
-async function handleGetSignalsRequest(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    const limitParam = url.searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : 10;
+async function handleGetSignalsRequest(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const url = new URL(request.url);
+  const limitParam = url.searchParams.get("limit");
+  const limit = limitParam ? parseInt(limitParam, 10) : 10;
 
-    if (isNaN(limit) || limit <= 0 || limit > 100) { // Add reasonable limit bounds
-         return createJsonResponse({ success: false, error: "Invalid limit parameter. Must be between 1 and 100." }, 400);
-    }
+  if (isNaN(limit) || limit <= 0 || limit > 100) {
+    // Add reasonable limit bounds
+    return createJsonResponse(
+      {
+        success: false,
+        error: "Invalid limit parameter. Must be between 1 and 100.",
+      },
+      400
+    );
+  }
 
-    try {
-        const results = await getRecentSignals(env, limit);
-        return createJsonResponse({ success: true, result: results.results || [] }, 200);
-    } catch (error) {
-        console.error("Error retrieving signals from D1:", error);
-        return createJsonResponse({ success: false, error: "Internal server error while retrieving signals." }, 500);
-    }
-} 
+  try {
+    const results = await getRecentSignals(env, limit);
+    return createJsonResponse(
+      { success: true, result: results.results || [] },
+      200
+    );
+  } catch (error) {
+    console.error("Error retrieving signals from D1:", error);
+    return createJsonResponse(
+      {
+        success: false,
+        error: "Internal server error while retrieving signals.",
+      },
+      500
+    );
+  }
+}

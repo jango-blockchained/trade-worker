@@ -46,7 +46,6 @@ function initDatabase() {
     execSync(command, { stdio: "inherit" });
 
     console.log("Database initialization command executed successfully.");
-
   } catch (error) {
     console.error("Error initializing database:", error.message);
     if (error.stdout) console.error("stdout:", error.stdout.toString());

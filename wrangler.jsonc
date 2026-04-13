@@ -1,16 +1,16 @@
 {
   "name": "trade-worker",
-  "account_id": "profile", // Assuming this is correct, keep if needed or remove if default
+  "account_id": "profile",
   "main": "src/index.ts",
-  "compatibility_date": "2025-03-07", // Standardized
-  "compatibility_flags": ["nodejs_compat"], // Standardized
-  "observability": { // Standardized
+  "compatibility_date": "2025-03-07",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
     "enabled": true,
     "head_sampling_rate": 1
   },
   "vars": {
-    // Secrets must be created via `wrangler secret put`
-    // The values here are placeholders and will be populated from secrets
     "INTERNAL_KEY_BINDING": null,
     "MEXC_KEY_BINDING": null,
     "MEXC_SECRET_BINDING": null,
@@ -23,7 +23,6 @@
     {
       "binding": "D1_SERVICE",
       "service": "d1-worker"
-      // Add environment if needed, e.g., "environment": "production"
     },
     {
       "binding": "TELEGRAM_API",
@@ -34,14 +33,12 @@
     {
       "binding": "CONFIG_KV",
       "id": "c5917667a21745e390ff969f32b1847d"
-      // "preview_id": "<YOUR_PREVIEW_ID>" // Add preview ID for local dev/testing
     }
   ],
   "r2_buckets": [
     {
       "binding": "REPORTS_BUCKET",
       "bucket_name": "trade-reports"
-      // "preview_bucket_name": "preview-trade-reports" // Optional: Use a different bucket for `wrangler dev`
     }
   ],
   "vectorize": [
@@ -58,12 +55,19 @@
   },
   "d1_databases": [
     {
-      "binding": "DB", // Standard binding name
+      "binding": "DB",
       "database_name": "trade-data-db",
-      "database_id": "a682f084-594e-4bd8-be2d-40ea5f8cf42e", // ID from wrangler d1 create output
-      "preview_database_id": "a682f084-594e-4bd8-be2d-40ea5f8cf42e" // Use same for preview for now
+      "database_id": "a682f084-594e-4bd8-be2d-40ea5f8cf42e",
+      "preview_database_id": "a682f084-594e-4bd8-be2d-40ea5f8cf42e"
     }
-  ]
-  // Note: Removed secrets_store_secrets definition. Secrets are now declared in vars and expected via `wrangler secret put`.
-  // Note: Removed commented-out D1_WORKER_URL var.
-} 
+  ],
+  "secrets_store": {
+    "bindings": [
+      {
+        "binding": "API_SERVICE_KEY_BINDING",
+        "store_id": "48433bc559a943f09d9d6c622e188fd5",
+        "secret_name": "API_SERVICE_KEY"
+      }
+    ]
+  }
+}

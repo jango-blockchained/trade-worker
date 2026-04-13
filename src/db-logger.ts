@@ -111,20 +111,22 @@ export class DbLogger implements IDbLogger {
       const executionTime = startTime ? Date.now() - startTime : null;
       // Safely get headers, handling potential differences in mock/real Response objects
       let headersObject = {};
-      if (response.headers && typeof response.headers.entries === 'function') {
-          try {
-              headersObject = Object.fromEntries(response.headers.entries());
-          } catch (e) {
-              console.error("Failed to get headers using entries():", e);
-              // Fallback or alternative way to get headers if needed?
-              // For now, log the error and continue with empty headersObject
-          }
+      if (response.headers && typeof response.headers.entries === "function") {
+        try {
+          headersObject = Object.fromEntries(response.headers.entries());
+        } catch (e) {
+          console.error("Failed to get headers using entries():", e);
+          // Fallback or alternative way to get headers if needed?
+          // For now, log the error and continue with empty headersObject
+        }
       } else {
-           console.warn("response.headers.entries is not a function or headers missing for logResponse");
-           // Attempt to get headers another way if possible, or accept it might be missing
+        console.warn(
+          "response.headers.entries is not a function or headers missing for logResponse"
+        );
+        // Attempt to get headers another way if possible, or accept it might be missing
       }
 
-      const responseBody = response.body ? await response.text() : null; // Get body safely
+      const responseBody = response.body ? await response.clone().text() : null; // Get body safely
       const errorString = error ? error.toString() : null;
 
       const logPayload = {

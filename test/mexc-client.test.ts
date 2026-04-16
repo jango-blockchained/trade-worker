@@ -234,14 +234,23 @@ describe("MexcClient (V1 Futures)", () => {
   });
 
   // --- API Method Tests ---
-  test("setLeverage should resolve immediately and warn (needs verification)", async () => {
-    const warnSpy = spyOn(console, "warn");
-    const result = await client.setLeverage("BTC_USDT", 10);
-    expect(result).toEqual({ info: "Set leverage needs V1 API verification" });
-    expect(warnSpy).toHaveBeenCalledWith(
-      "setLeverage for MEXC V1 Futures needs verification."
+  test("setLeverage should call makeRequest with correct params", async () => {
+    const params = {
+      symbol: "BTC_USDT",
+      leverage: 10,
+    };
+    const makeRequestSpy = spyOn(client as any, "makeRequest");
+
+    await client.setLeverage(params.symbol, params.leverage);
+
+    expect(makeRequestSpy).toHaveBeenCalledWith(
+      "POST",
+      "/api/v1/private/position/change_leverage",
+      {
+        symbol: params.symbol,
+        leverage: params.leverage,
+      }
     );
-    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   test("executeTrade (Market Open Long) should call makeRequest with correct params", async () => {

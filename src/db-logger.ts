@@ -1,5 +1,31 @@
 // workers/trade-worker/src/db-logger.ts
 
+// Database Schema Reference:
+// See scripts/init-db.sql for the complete DDL
+//
+// CREATE TABLE trade_requests (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+//     method TEXT NOT NULL,
+//     path TEXT NOT NULL,
+//     headers TEXT,
+//     body TEXT,
+//     source_ip TEXT,
+//     user_agent TEXT
+// );
+//
+// CREATE TABLE trade_responses (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     request_id INTEGER,
+//     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+//     status_code INTEGER,
+//     headers TEXT,
+//     body TEXT,
+//     error TEXT,
+//     execution_time_ms INTEGER,
+//     FOREIGN KEY (request_id) REFERENCES trade_requests(id)
+// );
+
 // Define Env structure expected by the logger
 // This should align with the Env interface in index.ts
 interface LoggerEnv {
@@ -47,7 +73,7 @@ export class DbLogger implements IDbLogger {
       const logPayload = {
         query: `INSERT INTO trade_requests
                          (method, path, headers, body, source_ip, user_agent)
-                         VALUES (?, ?, ?, ?, ?, ?)`, // TODO: Define table schema
+                         VALUES (?, ?, ?, ?, ?, ?)`,
         params: [
           request.method,
           new URL(request.url).pathname,
@@ -132,7 +158,7 @@ export class DbLogger implements IDbLogger {
       const logPayload = {
         query: `INSERT INTO trade_responses
                          (request_id, status_code, headers, body, error, execution_time_ms)
-                         VALUES (?, ?, ?, ?, ?, ?)`, // TODO: Define table schema
+                         VALUES (?, ?, ?, ?, ?, ?)`,
         params: [
           requestId,
           response.status,

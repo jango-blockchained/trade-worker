@@ -23,7 +23,9 @@ interface Env extends EnvWithKV {
   // CONFIG_KV: KVNamespace; // Inherited from EnvWithKV
   // Bindings from wrangler.toml
   D1_SERVICE?: Fetcher; // Service binding for d1-worker
+  TELEGRAM_SERVICE?: Fetcher; // Service binding for telegram-worker
   INTERNAL_KEY_BINDING?: SecretBinding; // For internal auth (expects WEBHOOK_INTERNAL_KEY)
+  TELEGRAM_INTERNAL_KEY_BINDING?: SecretBinding; // For telegram service auth
   MEXC_KEY_BINDING?: SecretBinding;
   MEXC_SECRET_BINDING?: SecretBinding;
   BINANCE_KEY_BINDING?: SecretBinding;
@@ -432,56 +434,61 @@ async function executeTrade(
     });
     await dbLogger.logResponse(dbLogId, response, null, startTime);
 
-    // --- Task 10.5: Example Inter-Worker Communication ---
-    // Example: Send notification via telegram-worker after trade execution
-    try {
-      const notificationMessage = result?.success
-        ? `Trade executed successfully on ${exchange}: ${action} ${quantity} ${symbol}. Result: ${JSON.stringify(result.result)}`
-        : `Trade execution failed on ${exchange}: ${action} ${quantity} ${symbol}. Error: ${result?.error || "Unknown error"}`;
+    // --- Send notification via telegram-worker after trade execution ---
+    if (env.TELEGRAM_SERVICE) {
+      try {
+        const notificationMessage = result?.success
+          ? `Trade executed successfully on ${exchange}: ${action} ${quantity} ${symbol}. Result: ${JSON.stringify(result.result)}`
+          : `Trade execution failed on ${exchange}: ${action} ${quantity} ${symbol}. Error: ${result?.error || "Unknown error"}`;
 
-      const telegramPayload = {
-        message: notificationMessage,
-        // chatId: "SPECIFIC_CHAT_ID_IF_NEEDED", // Optional: Override default chat ID
-      };
+        const telegramPayload = {
+          message: notificationMessage,
+        };
 
-      const telegramWorkerRequest = new Request(
-        "https://telegram-worker.your-domain.workers.dev/webhook", // Use telegram-worker webhook endpoint
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(telegramPayload),
+        const telegramWorkerRequest = new Request(
+          "https://internal/webhook", // Service binding uses internal URL
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(telegramPayload),
+          }
+        );
+
+        // Add internal auth key if configured
+        if (env.TELEGRAM_INTERNAL_KEY_BINDING) {
+          const internalKey = await env.TELEGRAM_INTERNAL_KEY_BINDING.get();
+          if (internalKey) {
+            telegramWorkerRequest.headers.set(
+              "X-Internal-Auth-Key",
+              internalKey
+            );
+          }
         }
-      );
 
-      console.log(
-        `[${dbLogId}] Calling TELEGRAM_API service binding for notification...`
-      );
-      // const notificationResponse = await env.TELEGRAM_API.fetch(telegramWorkerRequest);
-      // if (!notificationResponse.ok) {
-      //   console.error(
-      //     `[${dbLogId}] Error calling TELEGRAM_API for notification: ${notificationResponse.status} ${await notificationResponse.text()}`
-      //   );
-      //   // Log error, but don't fail the trade response based on notification failure
-      // }
-      // else {
-      //    console.log(`[${dbLogId}] Notification sent via TELEGRAM_API.`);
-      // }
-      console.log(
-        `[${dbLogId}] Skipped calling TELEGRAM_API for notification (placeholder).`
-      ); // Placeholder log
-    } catch (notificationError: unknown) {
-      const errorMsg =
-        notificationError instanceof Error
-          ? notificationError.message
-          : String(notificationError || "Unknown notification error");
-      console.error(
-        `[${dbLogId}] Exception calling TELEGRAM_API for notification:`,
-        errorMsg,
-        notificationError
-      );
-      // Log error, but don't fail the trade response
+        console.log(
+          `[${dbLogId}] Calling TELEGRAM_SERVICE for notification...`
+        );
+        const notificationResponse = await env.TELEGRAM_SERVICE.fetch(
+          telegramWorkerRequest
+        );
+        if (!notificationResponse.ok) {
+          console.error(
+            `[${dbLogId}] Error calling TELEGRAM_SERVICE for notification: ${notificationResponse.status} ${await notificationResponse.text()}`
+          );
+        } else {
+          console.log(`[${dbLogId}] Notification sent via TELEGRAM_SERVICE.`);
+        }
+      } catch (notificationError: unknown) {
+        const errorMsg =
+          notificationError instanceof Error
+            ? notificationError.message
+            : String(notificationError || "Unknown notification error");
+        console.error(
+          `[${dbLogId}] Exception calling TELEGRAM_SERVICE for notification:`,
+          errorMsg
+        );
+      }
     }
-    // --- End Task 10.5 ---
 
     return response;
   } catch (error: unknown) {

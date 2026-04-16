@@ -161,20 +161,20 @@ export class MexcClient implements IMexcClient {
   }
 
   /**
-   * Set leverage for a symbol (adjust parameters based on V1 API). Might not be needed or different in V1.
-   * Placeholder - Verify V1 API endpoint and parameters.
+   * Set leverage for a symbol.
+   * MEXC V1 Futures API endpoint: POST /api/v1/private/position/change_leverage
    */
   async setLeverage(
     symbol: string,
     leverage: number,
     positionSide: string = "BOTH"
   ): Promise<any> {
-    console.warn("setLeverage for MEXC V1 Futures needs verification.");
-    // V1 API might require different endpoint or params, e.g., /api/v1/private/position/leverage
-    // const path = "/api/v1/private/position/change_leverage";
-    // const params = { symbol, leverage };
-    // return this.makeRequest<any>('POST', path, params);
-    return Promise.resolve({ info: "Set leverage needs V1 API verification" });
+    const path = "/api/v1/private/position/change_leverage";
+    const params: Record<string, string | number> = {
+      symbol: symbol,
+      leverage: leverage,
+    };
+    return this.makeRequest<any>("POST", path, params);
   }
 
   /**
@@ -191,11 +191,7 @@ export class MexcClient implements IMexcClient {
     const path = "/api/v1/private/order/submit";
     const apiParams: Record<string, string | number> = {
       symbol: params.symbol,
-      side:
-        params.side.toUpperCase() === "BUY" ||
-        params.side.toUpperCase() === "LONG"
-          ? 1
-          : 2, // 1: Open long, 2: Open short, 3: Close long, 4: Close short
+      side: 1, // Default to Open Long, will be overridden below if needed
       type: params.orderType?.toUpperCase() === "LIMIT" ? 1 : 2, // 1: Limit, 2: Market
       openType: 1, // 1: Isolated, 2: Cross
       volume: params.quantity, // Quantity

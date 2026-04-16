@@ -56,6 +56,16 @@ const mockEnv = {
     delete: vi.fn(),
   },
   INTERNAL_KEY_BINDING: { get: vi.fn().mockResolvedValue("test-internal-key") },
+  TELEGRAM_SERVICE: {
+    fetch: vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), { status: 200 })
+      ),
+  },
+  TELEGRAM_INTERNAL_KEY_BINDING: {
+    get: vi.fn().mockResolvedValue("test-telegram-key"),
+  },
   MEXC_KEY_BINDING: { get: vi.fn().mockResolvedValue("mexc-key") },
   MEXC_SECRET_BINDING: { get: vi.fn().mockResolvedValue("mexc-secret") },
   BINANCE_KEY_BINDING: { get: vi.fn().mockResolvedValue("binance-key") },
@@ -123,7 +133,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any); // Pass mock context if needed
 
       expect(response.status).toBe(201);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toHaveProperty("signalId");
       expect(mockPrepare).toHaveBeenCalledWith(
@@ -149,7 +159,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
 
       const response = await worker.fetch(request, mockEnv, {} as any);
       expect(response.status).toBe(400);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Invalid JSON");
       expect(mockRun).not.toHaveBeenCalled();
@@ -161,7 +171,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(400);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Missing required fields");
       expect(mockRun).not.toHaveBeenCalled();
@@ -178,7 +188,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(500);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Failed to store signal");
       expect(mockRun).toHaveBeenCalledTimes(1);
@@ -195,7 +205,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(500);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Internal server error");
       expect(mockRun).toHaveBeenCalledTimes(1);
@@ -233,7 +243,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual(mockSignalResults);
       expect(mockPrepare).toHaveBeenCalledWith(
@@ -253,7 +263,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual([mockSignalResults[0]]);
       expect(mockBind).toHaveBeenCalledWith(1); // Specified limit
@@ -267,7 +277,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual([]);
       expect(mockAll).toHaveBeenCalledTimes(1);
@@ -277,7 +287,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const request = createMockRequest("GET", "/api/signals?limit=abc");
       const response = await worker.fetch(request, mockEnv, {} as any);
       expect(response.status).toBe(400);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Invalid limit");
       expect(mockAll).not.toHaveBeenCalled();
@@ -306,7 +316,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(500);
-      const responseBody = await response.clone().json();
+      const responseBody = await response.json();
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Internal server error");
       expect(mockAll).toHaveBeenCalledTimes(1);
@@ -557,8 +567,7 @@ describe("Trade Worker Handlers", () => {
       } as any);
 
       expect(response.status).toBe(200);
-      const bodyText = await response.clone().text();
-      const body = JSON.parse(bodyText);
+      const body = await response.json();
       expect(body.success).toBe(true);
       expect(body.result).toEqual({ orderId: "mexc123" });
 
@@ -609,7 +618,7 @@ describe("Trade Worker Handlers", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      const body = await response.clone().json();
+      const body = await response.json();
       expect(body.success).toBe(false);
       expect(body.error).toContain("Invalid quantity");
       expect(mockLogRequest).toHaveBeenCalled(); // Still logs the bad request
@@ -626,7 +635,7 @@ describe("Trade Worker Handlers", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      const body = await response.clone().json();
+      const body = await response.json();
       expect(body.success).toBe(false);
       expect(body.error).toContain("API secret bindings not configured");
     });
@@ -660,7 +669,7 @@ describe("Trade Worker Handlers", () => {
       } as any);
 
       expect(response.status).toBe(500);
-      const body = await response.clone().json();
+      const body = await response.json();
       expect(body.success).toBe(false);
       expect(body.error).toContain(tradeError.message);
       expect(mockLogResponse).toHaveBeenCalledWith(
@@ -727,7 +736,7 @@ describe("Trade Worker Handlers", () => {
         waitUntil: vi.fn(),
       } as any);
       expect(response.status).toBe(403);
-      const body = await response.clone().json();
+      const body = await response.json();
       expect(body.error).toBe("Authentication failed");
     });
 
@@ -738,7 +747,7 @@ describe("Trade Worker Handlers", () => {
         waitUntil: vi.fn(),
       } as any);
       expect(response.status).toBe(500);
-      const body = await response.clone().json();
+      const body = await response.json();
       expect(body.error).toBe("Service configuration error");
     });
 
@@ -756,7 +765,7 @@ describe("Trade Worker Handlers", () => {
         waitUntil: vi.fn(),
       } as any);
       expect(response.status).toBe(400);
-      const body = await response.clone().json();
+      const body = await response.json();
       expect(body.error).toContain("Invalid action");
     });
   });

@@ -354,6 +354,35 @@ async function executeTrade(
       leverage,
     } = payload;
 
+    // --- Risk Management via CONFIG_KV ---
+    let overriddenLeverage = leverage;
+    let maxPositionSize: number | null = null;
+    
+    try {
+        if (env.CONFIG_KV) {
+            const defaultLevStr = await env.CONFIG_KV.get('trade:default_leverage');
+            if (defaultLevStr && !overriddenLeverage) {
+               overriddenLeverage = parseInt(defaultLevStr, 10);
+               console.log(`[Risk Management] Applied default leverage: ${overriddenLeverage}`);
+            }
+            const maxSizeStr = await env.CONFIG_KV.get('trade:max_position_size');
+            if (maxSizeStr) {
+               maxPositionSize = parseFloat(maxSizeStr);
+            }
+        }
+    } catch(e) {
+        console.error("Failed to fetch risk management settings from KV:", e);
+    }
+
+    if (maxPositionSize !== null && quantity > maxPositionSize) {
+        const errorMsg = `Trade quantity (${quantity}) exceeds maximum allowed size (${maxPositionSize})`;
+        console.error(errorMsg);
+        const response = createJsonResponse({ success: false, error: errorMsg }, 400);
+        await dbLogger.logResponse(dbLogId, response, null, startTime);
+        return response;
+    }
+    // --- End Risk Management ---
+
     if (!(await validateApiCredentials(exchange, env))) {
       const errorMsg = `API secret bindings not configured or accessible for ${exchange}`;
       console.error(errorMsg);
@@ -400,9 +429,9 @@ async function executeTrade(
         throw new Error(`Unsupported exchange: ${exchange}`);
     }
 
-    if (client.setLeverage && leverage) {
+    if (client.setLeverage && overriddenLeverage) {
       try {
-        await client.setLeverage(symbol, leverage);
+        await client.setLeverage(symbol, overriddenLeverage);
       } catch (leverageError) {
         console.error(`Failed to set leverage:`, leverageError);
         // Continue with trade execution even if setting leverage fails
@@ -427,6 +456,61 @@ async function executeTrade(
     }
 
     console.log("Trade execution successful:", result);
+    
+    // --- Update D1 Tables (Trades and Positions) ---
+    if (env.D1_SERVICE) {
+      try {
+         const tradeId = crypto.randomUUID();
+         const tradeStatus = 'EXECUTED'; // Assuming success if it reached here
+         
+         const tradePayload = {
+            query: `INSERT INTO trades (id, timestamp, exchange, symbol, action, quantity, price, leverage, status, raw_response) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            params: [
+               tradeId,
+               Math.floor(Date.now() / 1000),
+               exchange,
+               symbol,
+               action,
+               quantity,
+               price || null,
+               overriddenLeverage || null,
+               tradeStatus,
+               JSON.stringify(result)
+            ]
+         };
+         await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(tradePayload)
+         }));
+
+         // Update or insert into positions table
+         const side = action.includes('LONG') ? 'LONG' : 'SHORT';
+         const posStatus = action.startsWith('CLOSE') ? 'CLOSED' : 'OPEN';
+         const posId = `${exchange}-${symbol}-${side}`;
+         
+         const posPayload = {
+             query: `REPLACE INTO positions (id, exchange, symbol, side, size, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             params: [
+                posId,
+                exchange,
+                symbol,
+                side,
+                posStatus === 'OPEN' ? quantity : 0, // Simplify size logic for now
+                posStatus,
+                Math.floor(Date.now() / 1000)
+             ]
+         };
+         await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(posPayload)
+         }));
+      } catch (e) {
+         console.error("Failed to update D1 trades and positions tables", e);
+      }
+    }
+
     const response = createJsonResponse({
       success: true,
       result: result,

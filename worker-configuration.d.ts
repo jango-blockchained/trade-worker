@@ -18,7 +18,7 @@ declare namespace Cloudflare {
 		REPORTS_BUCKET: R2Bucket;
 		DB: D1Database;
 		D1_SERVICE: Fetcher;
-		TELEGRAM_API: Fetcher;
+		TELEGRAM_SERVICE: Fetcher;
 		VECTORIZE_INDEX: VectorizeIndex;
 		BROWSER: Fetcher;
 		AI: Ai;

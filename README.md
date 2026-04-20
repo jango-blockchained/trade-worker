@@ -2,11 +2,11 @@
 
 **Last Updated:** April 2026
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Runtime](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh) [![Platform](https://img.shields.io/badge/Platform-Cloudflare%20Edge%20Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/) [![License](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/) [![Build Status](https://img.shields.io/badge/Build-TODO-lightgrey?style=for-the-badge)](https://github.com/jango-blockchained/hoox-cf-edge-worker/actions) <!-- TODO: Update Build Status link -->
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Runtime](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh) [![Platform](https://img.shields.io/badge/Platform-Cloudflare®%20Edge%20Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/) [![License](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/) [![Build Status](https://img.shields.io/badge/Build-TODO-lightgrey?style=for-the-badge)](https://github.com/jango-blockchained/hoox-setup/actions) 
 
-**[Main Repository](https://github.com/jango-blockchained/hoox-cf-edge-worker)** <!-- TODO: Update Main Repo link -->
+**[Main Repository](https://github.com/jango-blockchained/hoox-setup)** 
 
-A Cloudflare Worker service for executing cryptocurrency trades, logging signals, and potentially leveraging AI/RAG for strategy analysis. This worker interacts directly with exchange APIs, D1, R2, and potentially AI services.
+A Cloudflare® Worker service for executing cryptocurrency trades, logging signals, and potentially leveraging AI/RAG for strategy analysis. This worker interacts directly with exchange APIs, D1, R2, and potentially AI services.
 
 ## Features
 
@@ -23,9 +23,9 @@ A Cloudflare Worker service for executing cryptocurrency trades, logging signals
 - Node.js >= 16
 - Bun
 - Wrangler CLI
-- Cloudflare Workers account
-- Cloudflare D1 Database access
-- Cloudflare R2 access
+- Cloudflare® Workers account
+- Cloudflare® D1 Database access
+- Cloudflare® R2 access
 - API keys for desired exchanges.
 
 ## Setup
@@ -34,7 +34,7 @@ A Cloudflare Worker service for executing cryptocurrency trades, logging signals
     ```bash
     bun install
     ```
-2.  Set your Cloudflare account ID in `wrangler.jsonc`.
+2.  Set your Cloudflare® account ID in `wrangler.jsonc`.
 3.  Create necessary D1 database(s) and R2 bucket(s):
     ```bash
     # Example D1 database for trade data
@@ -49,7 +49,7 @@ A Cloudflare Worker service for executing cryptocurrency trades, logging signals
     # Assuming schema.sql exists in this worker directory
     npx wrangler d1 execute trade-data-db --file=./schema.sql
     ```
-5.  Configure Secrets (via Cloudflare dashboard or `wrangler secret put`):
+5.  Configure Secrets (via Cloudflare® dashboard or `wrangler secret put`):
     - `INTERNAL_KEY_BINDING`: The **shared** secret key for internal authentication.
     - `MEXC_API_KEY`, `MEXC_API_SECRET`: If using MEXC.
     - `BINANCE_API_KEY`, `BINANCE_API_SECRET`: If using Binance.
@@ -199,7 +199,7 @@ The worker uses its `DB` binding to interact directly with the configured D1 dat
 
 - Internal requests to `/process` _must_ include a valid `internalAuthKey`.
 - Public-facing API endpoints (like `/api/*`) require separate, robust authentication/authorization.
-- Exchange API keys/secrets are stored securely using Cloudflare Workers Secrets.
+- Exchange API keys/secrets are stored securely using Cloudflare® Workers Secrets.
 - D1 interactions use parameterized queries to prevent SQL injection.
 
 ## Error Handling
@@ -219,3 +219,8 @@ The worker includes error handling for:
 3. Commit your changes
 4. Push to the branch
 5. Create a new Pull Request
+
+
+---
+
+*Cloudflare® and the Cloudflare logo are trademarks and/or registered trademarks of Cloudflare, Inc. in the United States and other jurisdictions.*

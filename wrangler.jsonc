@@ -61,14 +61,5 @@
       "database_id": "a682f084-594e-4bd8-be2d-40ea5f8cf42e",
       "preview_database_id": "a682f084-594e-4bd8-be2d-40ea5f8cf42e"
     }
-  ],
-  "secrets_store": {
-    "bindings": [
-      {
-        "binding": "API_SERVICE_KEY_BINDING",
-        "store_id": "48433bc559a943f09d9d6c622e188fd5",
-        "secret_name": "API_SERVICE_KEY"
-      }
-    ]
-  }
+  ]
 }

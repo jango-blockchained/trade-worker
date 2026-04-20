@@ -770,6 +770,5 @@ describe("Trade Worker Handlers", () => {
     });
   });
 
-  // TODO: Add tests for /report handler
-  // TODO: Add tests for /test-ai handler
+  // Tests for /report handler and /test-ai handler can be added here in the future
 });

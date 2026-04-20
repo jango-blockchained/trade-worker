@@ -107,7 +107,7 @@ interface TradeSignalRecord {
 // --- Constants ---
 
 const PROCESS_ENDPOINT = "/process"; // For legacy/direct calls with internal key
-const WEBHOOK_ENDPOINT = "/webhook"; // For calls from webhook-receiver via Service Binding
+const WEBHOOK_ENDPOINT = "/webhook"; // For calls from hoox via Service Binding
 const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
 
 // --- Worker Definition ---

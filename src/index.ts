@@ -41,6 +41,8 @@ interface Env extends EnvWithKV {
     DbLogger?: typeof DbLogger;
   };
 
+  ENABLE_DEBUG_ENDPOINTS?: string;
+
   // Add other variables/bindings if needed
 }
 
@@ -119,6 +121,7 @@ export default {
     ctx: ExecutionContext
   ): Promise<Response> {
     const url = new URL(request.url);
+    const debugEndpointsEnabled = env.ENABLE_DEBUG_ENDPOINTS === "true";
 
     // Call the shared KV logging function
     // await logKvTimestamp(env); // Temporarily commented out due to test module resolution issues
@@ -138,6 +141,9 @@ export default {
 
     // --- Add temporary GET endpoint for testing AI ---
     if (request.method === "GET" && url.pathname === "/test-ai") {
+      if (!debugEndpointsEnabled) {
+        return new Response("Not Found", { status: 404 });
+      }
       // Ensure this endpoint is removed or secured before production!
       console.warn("Executing temporary /test-ai endpoint...");
       return await handleAiTest(request, env);
@@ -623,6 +629,30 @@ async function handleWebhookRequest(
     // Assuming logRequest can handle the payload directly and returns a number ID
     // Might need adjustment based on DbLogger implementation
     dbLogId = await dbLogger.logRequest(request, payload);
+
+    // Internal authentication check
+    const internalAuthKey = request.headers.get("X-Internal-Auth-Key");
+    const expectedInternalKey = await env.INTERNAL_KEY_BINDING?.get();
+
+    if (!expectedInternalKey) {
+      console.error("INTERNAL_KEY_BINDING not configured for /webhook endpoint.");
+      const response = createJsonResponse(
+        { success: false, error: "Service configuration error" },
+        500
+      );
+      await dbLogger.logResponse(dbLogId, response, null, startTime);
+      return response;
+    }
+
+    if (!internalAuthKey || internalAuthKey !== expectedInternalKey) {
+      console.warn(`Authentication failed for webhook request ID: ${incomingRequestId}`);
+      const response = createJsonResponse(
+        { success: false, error: "Unauthorized" },
+        403
+      );
+      await dbLogger.logResponse(dbLogId, response, null, startTime);
+      return response;
+    }
 
     const validation = validateTradePayload(payload);
     if (!validation.isValid) {

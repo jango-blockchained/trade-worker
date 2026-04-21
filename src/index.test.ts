@@ -88,16 +88,23 @@ function createMockRequest(
   method: string,
   urlPath: string,
   body?: any,
-  headers?: HeadersInit
+  headers?: HeadersInit,
+  addInternalAuth = true
 ): Request {
   const url = `http://localhost${urlPath}`;
+  const headerObj = new Headers(headers);
+  if (body !== undefined) {
+    headerObj.set("Content-Type", "application/json");
+  }
+  if (addInternalAuth) {
+    headerObj.set("X-Internal-Auth-Key", "test-internal-key");
+  }
   const init: RequestInit = {
     method,
-    headers: new Headers(headers),
+    headers: headerObj,
   };
   if (body !== undefined) {
     init.body = JSON.stringify(body);
-    (init.headers as Headers).set("Content-Type", "application/json");
   }
   const request = new Request(url, init);
   // Mock the json() method for POST/PUT requests
@@ -705,6 +712,25 @@ describe("Trade Worker Handlers", () => {
 
       expect(mockMexcClient.setLeverage).not.toHaveBeenCalled();
       expect(mockMexcClient.openLong).toHaveBeenCalled();
+    });
+
+    it("should return 403 if X-Internal-Auth-Key is missing", async () => {
+      const request = createMockRequest("POST", "/webhook", validPayload, {}, false);
+      const response = await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
+      expect(response.status).toBe(403);
+    });
+
+    it("should return 403 if X-Internal-Auth-Key is invalid", async () => {
+      const request = createMockRequest("POST", "/webhook", validPayload, { "X-Internal-Auth-Key": "wrong-key" });
+      const response = await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
+      expect(response.status).toBe(403);
+    });
+
+    it("should return 500 if INTERNAL_KEY_BINDING is not configured", async () => {
+      const envNoKey = { ...mockEnv, INTERNAL_KEY_BINDING: undefined };
+      const request = createMockRequest("POST", "/webhook", validPayload);
+      const response = await worker.fetch(request, envNoKey, { waitUntil: vi.fn() } as any);
+      expect(response.status).toBe(500);
     });
   });
 

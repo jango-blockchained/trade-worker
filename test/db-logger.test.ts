@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, jest } from "@jest/globals";
+import { describe, expect, test, beforeEach, jest } from "bun:test";
 import { DbLogger, type IDbLogger } from "../src/db-logger";
 import type { Fetcher } from "@cloudflare/workers-types"; // Import Fetcher type
 

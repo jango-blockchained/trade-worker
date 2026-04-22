@@ -721,7 +721,7 @@ describe("Trade Worker Handlers", () => {
     });
 
     it("should return 403 if X-Internal-Auth-Key is invalid", async () => {
-      const request = createMockRequest("POST", "/webhook", validPayload, { "X-Internal-Auth-Key": "wrong-key" });
+      const request = createMockRequest("POST", "/webhook", validPayload, { "X-Internal-Auth-Key": "wrong-key" }, false);
       const response = await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
       expect(response.status).toBe(403);
     });

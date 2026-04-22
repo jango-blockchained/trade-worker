@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import { describe, it, expect, mock, beforeEach, beforeAll, jest as vi } from "bun:test";
 import worker, {
   validateApiCredentials,
   validateTradePayload,

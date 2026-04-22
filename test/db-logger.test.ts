@@ -26,7 +26,7 @@ describe("DbLogger", () => {
     mockEnv = {
       D1_SERVICE: {
         fetch: mockD1ServiceFetch,
-      } as Fetcher, // Cast to Fetcher
+      } as any, // Cast to any to avoid missing properties like connect
     };
 
     // Default D1 service response (successful insert for request log)

@@ -70,6 +70,21 @@ export class DbLogger implements IDbLogger {
 
     try {
       const headers = Object.fromEntries(request.headers.entries());
+      const redactedHeaders = { ...headers };
+      const sensitiveHeaders = ["authorization", "x-internal-auth-key", "cookie"];
+      for (const h of sensitiveHeaders) {
+        if (redactedHeaders[h]) redactedHeaders[h] = "[REDACTED]";
+      }
+
+      let redactedBody = requestBody;
+      if (typeof requestBody === "object" && requestBody !== null) {
+        redactedBody = { ...requestBody };
+        const sensitiveFields = ["internalAuthKey", "apiKey", "password", "secret", "token"];
+        for (const field of sensitiveFields) {
+          if (field in redactedBody) redactedBody[field] = "[REDACTED]";
+        }
+      }
+
       const logPayload = {
         query: `INSERT INTO trade_requests
                          (method, path, headers, body, source_ip, user_agent)
@@ -77,8 +92,8 @@ export class DbLogger implements IDbLogger {
         params: [
           request.method,
           new URL(request.url).pathname,
-          JSON.stringify(headers),
-          JSON.stringify(requestBody), // Assumes body is JSON-serializable
+          JSON.stringify(redactedHeaders),
+          JSON.stringify(redactedBody), // Assumes body is JSON-serializable
           request.headers.get("cf-connecting-ip") || "unknown",
           request.headers.get("user-agent") || "unknown",
         ],
@@ -136,14 +151,16 @@ export class DbLogger implements IDbLogger {
     try {
       const executionTime = startTime ? Date.now() - startTime : null;
       // Safely get headers, handling potential differences in mock/real Response objects
-      let headersObject = {};
+      let headersObject: any = {};
       if (response.headers && typeof response.headers.entries === "function") {
         try {
           headersObject = Object.fromEntries(response.headers.entries());
+          const sensitiveHeaders = ["authorization", "x-internal-auth-key", "cookie"];
+          for (const h of sensitiveHeaders) {
+            if (headersObject[h]) headersObject[h] = "[REDACTED]";
+          }
         } catch (e) {
           console.error("Failed to get headers using entries():", e);
-          // Fallback or alternative way to get headers if needed?
-          // For now, log the error and continue with empty headersObject
         }
       } else {
         console.warn(

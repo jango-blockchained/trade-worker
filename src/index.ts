@@ -8,6 +8,7 @@ import type { R2Bucket } from "@cloudflare/workers-types"; // Import R2Bucket ty
 import { ExecutionContext } from "@cloudflare/workers"; // Import ExecutionContext
 import type { Ai } from "@cloudflare/ai"; // Import the Ai type
 import type { D1Database } from "@cloudflare/workers-types"; // Import D1Database type
+import type { Queue, QueueEvent, MessageSendRequest } from "@cloudflare/workers-types";
 
 // --- Type Definitions ---
 
@@ -32,6 +33,8 @@ interface Env extends EnvWithKV {
   BINANCE_SECRET_BINDING?: SecretBinding;
   BYBIT_KEY_BINDING?: SecretBinding;
   BYBIT_SECRET_BINDING?: SecretBinding;
+  // Queue consumer
+  TRADE_QUEUE?: Queue;
 
   // Optional Mocks for Testing
   __mocks__?: {
@@ -114,6 +117,17 @@ const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
 
 // --- Worker Definition ---
 
+type QueueMessage = {
+  requestId: string;
+  exchange: string;
+  action: string;
+  symbol: string;
+  quantity: number;
+  price?: number;
+  leverage?: number;
+  queuedAt: string;
+};
+
 export default {
   async fetch(
     request: Request,
@@ -122,6 +136,13 @@ export default {
   ): Promise<Response> {
     const url = new URL(request.url);
     const debugEndpointsEnabled = env.ENABLE_DEBUG_ENDPOINTS === "true";
+
+    // Handle queue consumer invocations
+    if (request.method === "POST" && url.pathname === "/queue") {
+      return new Response(JSON.stringify({ queue: "consumer" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     // Call the shared KV logging function
     // await logKvTimestamp(env); // Temporarily commented out due to test module resolution issues
@@ -139,26 +160,231 @@ export default {
     }
     // --- End R2 report endpoint ---
 
+    // --- Add worker health check endpoint ---
+    if (request.method === "GET" && url.pathname === "/health") {
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          timestamp: new Date().toISOString(),
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     // --- Add temporary GET endpoint for testing AI ---
     if (request.method === "GET" && url.pathname === "/test-ai") {
       if (!debugEndpointsEnabled) {
-        return new Response("Not Found", { status: 404 });
+        return new Response("Debug endpoints not enabled", { status: 403 });
       }
-      // Ensure this endpoint is removed or secured before production!
-      console.warn("Executing temporary /test-ai endpoint...");
-      return await handleAiTest(request, env);
-    }
-    // --- End temporary test endpoint ---
-
-    if (request.method === "POST") {
-      if (url.pathname === PROCESS_ENDPOINT) {
-        return await handleProcessRequest(request, env, ctx);
-      } else if (url.pathname === WEBHOOK_ENDPOINT) {
-        return await handleWebhookRequest(request, env, ctx);
-      }
+      return handleTestAiRequest(request, env);
     }
 
+    // --- Process Trade Webhook ---
+    if (request.method === "POST" && url.pathname === WEBHOOK_ENDPOINT) {
+      // Verify internal key first
+      const authHeader = request.headers.get("X-Internal-Auth-Key");
+      const expectedKey = await env.INTERNAL_KEY_BINDING?.get();
+
+      // If key is configured and doesn't match, reject
+      if (expectedKey && authHeader !== expectedKey) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      try {
+        const data = await request.json();
+        const { exchange, action, symbol, quantity, price, leverage } = data;
+
+        // --- Check for Valid Exchange ---
+        const validExchanges = ["binance", "mexc", "bybit"];
+        if (!exchange || !validExchanges.includes(exchange.toLowerCase())) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `Invalid exchange. Supported: ${validExchanges.join(", ")}`,
+            }),
+            { status: 400, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        // --- Initialize Exchange Client ---
+        let client: IExchangeClient | undefined;
+
+        console.log(`[TradeWebhook] Processing trade: ${action} ${symbol} on ${exchange}`);
+
+        // Initialize client based on exchange
+        const exchangeLower = exchange.toLowerCase();
+        switch (exchangeLower) {
+          case "mexcf":
+          case "mexc": {
+            const apiKey = await env.MEXC_KEY_BINDING?.get();
+            const apiSecret = await env.MEXC_SECRET_BINDING?.get();
+            if (apiKey && apiSecret) {
+              client = new MexcClient(apiKey, apiSecret);
+            }
+            break;
+          }
+          case "binance": {
+            const apiKey = await env.BINANCE_KEY_BINDING?.get();
+            const apiSecret = await env.BINANCE_SECRET_BINDING?.get();
+            if (apiKey && apiSecret) {
+              client = new BinanceClient(apiKey, apiSecret);
+            }
+            break;
+          }
+          case "bybit": {
+            const apiKey = await env.BYBIT_KEY_BINDING?.get();
+            const apiSecret = await env.BYBIT_SECRET_BINDING?.get();
+            if (apiKey && apiSecret) {
+              client = new BybitClient(apiKey, apiSecret);
+            }
+            break;
+          }
+          default:
+            return new Response(
+              JSON.stringify({ success: false, error: "Unsupported exchange" }),
+              { status: 400, headers: { "Content-Type": "application/json" } }
+            );
+        }
+
+        if (!client) {
+          console.error("[TradeWebhook] No client initialized");
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: "Exchange API credentials not configured",
+            }),
+            { status: 503, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        // --- Set Leverage ---
+        if (leverage && client.setLeverage) {
+          await client.setLeverage(symbol, leverage);
+          console.log(`[TradeWebhook] Set leverage to ${leverage}x for ${symbol}`);
+        }
+
+        // --- Execute Trade ---
+        const actionUpper = action.toUpperCase();
+        let result;
+
+        switch (actionUpper) {
+          case "LONG":
+            console.log(`[TradeWebhook] Opening LONG position for ${symbol} x${quantity}`);
+            result = await client.openLong(symbol, quantity, price);
+            break;
+          case "SHORT":
+            console.log(`[TradeWebhook] Opening SHORT position for ${symbol} x${quantity}`);
+            result = await client.openShort(symbol, quantity, price);
+            break;
+          case "CLOSE":
+            console.log(`[TradeWebhook] Closing position for ${symbol} x${quantity}`);
+            result = await client.closePosition(symbol, quantity);
+            break;
+          default:
+            return new Response(
+              JSON.stringify({ success: false, error: "Invalid action" }),
+              { status: 400, headers: { "Content-Type": "application/json" } }
+            );
+        }
+
+        console.log("[TradeWebhook] Trade result:", result);
+
+        // --- Log to D1 ---
+        try {
+          const dbLogger = new DbLogger(env);
+          await dbLogger.logTrade({
+            exchange,
+            symbol,
+            action,
+            price: result.price || price || 0,
+            quantity,
+            leverage,
+            orderId: result.orderId || result.order_id || result.clientOrderId || "",
+            rawResponse: JSON.stringify(result),
+          });
+        } catch (dbError) {
+          console.error("[TradeWebhook] Error logging trade to D1:", dbError);
+        }
+
+        // --- Send Notification ---
+        try {
+          if (env.TELEGRAM_SERVICE) {
+            const message = `Trade Executed: ${action} ${symbol} x${quantity} on ${exchange}`;
+            const notificationRequest = new Request("http://telegram-service/process", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                message,
+              }),
+            });
+            await env.TELEGRAM_SERVICE.fetch(notificationRequest);
+          }
+        } catch (notifyError) {
+          console.error("[TradeWebhook] Error sending notification:", notifyError);
+        }
+
+        // --- Return Success ---
+        return new Response(
+          JSON.stringify({
+            success: true,
+            result,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("[TradeWebhook] Error:", errorMessage);
+
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: errorMessage,
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // --- Default: Return 404 ---
     return new Response("Not Found", { status: 404 });
+  },
+
+  async queue(messages: QueueEvent<QueueMessage>[], env: Env): Promise<void> {
+    console.log(`[QueueHandler] Received ${messages.length} message(s)`);
+
+    for (const msg of messages) {
+      const trade = msg.body;
+      console.log(`[QueueHandler] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`);
+
+      const retryCount = (msg as any).retry?.count || 0;
+
+      try {
+        const result = await executeTradeFromQueue(trade, env);
+
+        if (result.success) {
+          console.log(`[QueueHandler] Trade executed: ${trade.requestId}`);
+          await sendTradeNotification(trade, env, result);
+        } else {
+          throw new Error(result.error || "Trade execution failed");
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[QueueHandler] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`);
+
+        if (retryCount < MAX_RETRIES) {
+          const delaySeconds = BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
+          console.log(`[QueueHandler] Scheduling retry for ${trade.requestId} in ${delaySeconds}s`);
+
+          (msg as any).retry?.({
+            delaySeconds,
+          });
+        } else {
+          console.error(`[QueueHandler] Max retries exceeded for ${trade.requestId}`);
+          await logFailedTrade(trade, errorMsg, env);
+          await sendTradeNotification(trade, env, { success: false, error: errorMsg });
+        }
+      }
+    }
   },
 };
 
@@ -1133,5 +1359,99 @@ async function handleGetSignalsRequest(
       },
       500
     );
+  }
+}
+
+// --- Queue Consumer Handler ---
+interface TradeQueueMessage {
+  requestId: string;
+  exchange: string;
+  action: string;
+  symbol: string;
+  quantity: number;
+  price?: number;
+  leverage?: number;
+  queuedAt: string;
+}
+
+const MAX_RETRIES = 5;
+const BACKOFF_DELAYS = [0, 30, 60, 300, 900]; // 0s, 30s, 1m, 5m, 15m
+
+export const queue = async (
+  messages: MessageEvent<TradeQueueMessage>[],
+  env: Env,
+  ctx: ExecutionContext
+): Promise<void> => {
+  console.log(`[Queue] Received ${messages.length} message(s)`);
+
+  for (const msg of messages) {
+    const trade = msg.body;
+    console.log(`[Queue] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`);
+
+    // Get retry count from message metadata
+    const retryCount = msg.retry?.count || 0;
+
+    try {
+      // Execute the trade
+      const result = await executeTradeFromQueue(trade, env);
+
+      if (result.success) {
+        console.log(`[Queue] Trade executed successfully: ${trade.requestId}`);
+        // Send notification if configured
+        await sendTradeNotification(trade, env, result);
+      } else {
+        throw new Error(result.error || "Trade execution failed");
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[Queue] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`);
+
+      if (retryCount < MAX_RETRIES) {
+        const delaySeconds = BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
+        console.log(`[Queue] Scheduling retry for ${trade.requestId} in ${delaySeconds}s (attempt ${retryCount + 2})`);
+
+        // Re-queue with delay using the message's retry mechanism
+        msg.retry({
+          delaySeconds,
+        });
+      } else {
+        console.error(`[Queue] Max retries exceeded for ${trade.requestId}, moving to DLQ`);
+
+        // Log failure to D1 for tracking
+        await logFailedTrade(trade, errorMsg, env);
+
+        // Send failure notification
+        await sendTradeNotification(trade, env, { success: false, error: errorMsg });
+      }
+    }
+  }
+};
+
+/**
+ * Send notification about trade status
+ */
+async function sendTradeNotification(
+  trade: TradeQueueMessage,
+  env: Env,
+  result: { success: boolean; error?: string; result?: unknown }
+): Promise<void> {
+  if (!env.TELEGRAM_SERVICE) return;
+
+  try {
+    const message = result.success
+      ? `✅ Trade Executed (Queue): ${trade.action} ${trade.symbol} x${trade.quantity}`
+      : `❌ Trade Failed (Queue): ${trade.action} ${trade.symbol} - ${result.error}`;
+
+    await env.TELEGRAM_SERVICE?.fetch(
+      new Request("http://telegram-service/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+        }),
+      })
+    );
+  } catch (e) {
+    console.error("[Queue] Failed to send notification:", e);
   }
 }

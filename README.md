@@ -17,6 +17,9 @@ A Cloudflare® Worker service for executing cryptocurrency trades, logging signa
 - Optional Workers AI / Vectorize integration for RAG or strategy analysis (`AI`, `VECTORIZE_INDEX` bindings).
 - Position management.
 - Error handling and logging.
+- **Queue Consumer**: Consumes trades from `trade-execution` queue.
+- **Retry Logic**: 5 attempts with exponential backoff (0s, 30s, 1m, 5m, 15m).
+- **Dead Letter Handling**: Failed trades logged to D1 after max retries.
 
 ## Prerequisites
 
@@ -84,6 +87,11 @@ A Cloudflare® Worker service for executing cryptocurrency trades, logging signa
       "ai": {
         // Example: If using Workers AI
         // "binding": "AI"
+      },
+      "queues": {
+        "consumers": [
+          { "queue": "trade-execution" }
+        ]
       },
       "secrets": [
         "INTERNAL_KEY_BINDING",

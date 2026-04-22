@@ -54,6 +54,13 @@
   "browser": {
     "binding": "BROWSER"
   },
+  "queues": {
+    "consumers": [
+      {
+        "queue": "trade-execution"
+      }
+    ]
+  },
   "d1_databases": [
     {
       "binding": "DB",

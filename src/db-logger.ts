@@ -59,6 +59,14 @@ export class DbLogger implements IDbLogger {
     }
   }
 
+  private static headersToObject(headers: Headers): Record<string, string> {
+    const result: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      result[key] = value;
+    });
+    return result;
+  }
+
   /**
    * Logs request details to the database.
    * @param request The incoming Request object.
@@ -69,7 +77,7 @@ export class DbLogger implements IDbLogger {
     if (!this.enabled || !this.env.D1_SERVICE) return null;
 
     try {
-      const headers = Object.fromEntries(request.headers.entries());
+      const headers = DbLogger.headersToObject(request.headers);
       const redactedHeaders = { ...headers };
       const sensitiveHeaders = ["authorization", "x-internal-auth-key", "cookie"];
       for (const h of sensitiveHeaders) {
@@ -154,7 +162,7 @@ export class DbLogger implements IDbLogger {
       let headersObject: any = {};
       if (response.headers && typeof response.headers.entries === "function") {
         try {
-          headersObject = Object.fromEntries(response.headers.entries());
+          headersObject = DbLogger.headersToObject(response.headers);
           const sensitiveHeaders = ["authorization", "x-internal-auth-key", "cookie"];
           for (const h of sensitiveHeaders) {
             if (headersObject[h]) headersObject[h] = "[REDACTED]";

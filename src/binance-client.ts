@@ -99,9 +99,11 @@ export class BinanceClient implements IBinanceClient {
     const allParams = { ...params, timestamp };
 
     const signature = await this.generateSignature(allParams);
-    const queryParams = new URLSearchParams(
-      allParams as Record<string, string>
-    ).toString();
+    const stringParams: Record<string, string> = {};
+    Object.entries(allParams).forEach(([k, v]) => {
+      stringParams[k] = String(v);
+    });
+    const queryParams = new URLSearchParams(stringParams).toString();
     const url = `${this.baseUrl}${path}?${queryParams}&signature=${signature}`;
 
     const options: RequestInit = {

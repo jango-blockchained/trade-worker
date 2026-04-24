@@ -39,6 +39,10 @@ interface Env {
   };
 
   ENABLE_DEBUG_ENDPOINTS?: string;
+  AI?: Ai;
+  D1_SERVICE?: Fetcher;
+  REPORTS_BUCKET?: R2Bucket;
+  TELEGRAM_SERVICE?: Fetcher;
 
   // Add other variables/bindings if needed
 }

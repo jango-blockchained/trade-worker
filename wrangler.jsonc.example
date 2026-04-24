@@ -1,0 +1,103 @@
+{
+  "name": "trade-worker",
+  // ACCOUNT_ID: Get from Cloudflare Dashboard > Overview > Account ID
+  "account_id": "YOUR_ACCOUNT_ID",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-07",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+
+  // OBSERVABILITY: Enable logging and sampling
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  // VARS: Environment variables (secrets set via `wrangler secret put`)
+  "vars": {
+    // INTERNAL_KEY: Service-to-service authentication
+    "INTERNAL_KEY_BINDING": null,
+    // MEXC_KEY/MEXC_SECRET: MEXC API credentials
+    "MEXC_KEY_BINDING": null,
+    "MEXC_SECRET_BINDING": null,
+    // BINANCE_KEY/BINANCE_SECRET: Binance API credentials
+    "BINANCE_KEY_BINDING": null,
+    "BINANCE_SECRET_BINDING": null,
+    // BYBIT_KEY/BYBIT_SECRET: Bybit API credentials
+    "BYBIT_KEY_BINDING": null,
+    "BYBIT_SECRET_BINDING": null
+  },
+
+  // SERVICES: Service bindings to other workers
+  "services": [
+    {
+      "binding": "D1_SERVICE",
+      "service": "d1-worker"
+    },
+    {
+      "binding": "TELEGRAM_SERVICE",
+      "service": "telegram-worker"
+    }
+  ],
+
+  // KV_NAMESPACES: Key-Value storage for config
+  "kv_namespaces": [
+    {
+      "binding": "CONFIG_KV",
+      "id": "YOUR_CONFIG_KV_ID"
+    }
+  ],
+
+  // R2_BUCKETS: Object storage for trade reports
+  // BUCKET_NAME: Get from Cloudflare Dashboard > R2 > Manage API
+  "r2_buckets": [
+    {
+      "binding": "REPORTS_BUCKET",
+      // BUCKET_NAME: Your R2 bucket name
+      "bucket_name": "YOUR_REPORTS_BUCKET_NAME"
+    }
+  ],
+
+  // VECTORIZE: AI embeddings index
+  "vectorize": [
+    {
+      "binding": "VECTORIZE_INDEX",
+      "index_name": "YOUR_INDEX_NAME"
+    }
+  ],
+
+  // AI: Cloudflare Workers AI
+  "ai": {
+    "binding": "AI"
+  },
+
+  // BROWSER: Puppeteer browser for web3 interactions
+  "browser": {
+    "binding": "BROWSER"
+  },
+
+  // QUEUES: Queue consumer for trade execution
+  "queues": {
+    "consumers": [
+      {
+        // QUEUE: Queue name to consume from
+        "queue": "YOUR_TRADE_QUEUE_NAME"
+      }
+    ]
+  },
+
+  // D1_DATABASES: SQLite database for trade data
+  // DATABASE_ID: Get from Cloudflare Dashboard > D1 > Databases
+  "d1_databases": [
+    {
+      "binding": "DB",
+      // DATABASE_NAME: Your D1 database name
+      "database_name": "YOUR_DATABASE_NAME",
+      // DATABASE_ID: Your D1 database ID (UUID)
+      "database_id": "YOUR_DATABASE_ID",
+      // PREVIEW_DATABASE_ID: For local dev with wrangler dev --remote
+      "preview_database_id": "YOUR_DATABASE_ID"
+    }
+  ]
+}

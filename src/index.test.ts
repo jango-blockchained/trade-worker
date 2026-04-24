@@ -57,7 +57,7 @@ const mockEnv = {
     list: vi.fn(),
     delete: vi.fn(),
   },
-  INTERNAL_KEY_BINDING: { get: vi.fn().mockResolvedValue("test-internal-key") },
+  INTERNAL_KEY_BINDING: "test-internal-key",
   TELEGRAM_SERVICE: {
     fetch: vi
       .fn()
@@ -65,15 +65,13 @@ const mockEnv = {
         new Response(JSON.stringify({ success: true }), { status: 200 })
       ),
   },
-  TELEGRAM_INTERNAL_KEY_BINDING: {
-    get: vi.fn().mockResolvedValue("test-telegram-key"),
-  },
-  MEXC_KEY_BINDING: { get: vi.fn().mockResolvedValue("mexc-key") },
-  MEXC_SECRET_BINDING: { get: vi.fn().mockResolvedValue("mexc-secret") },
-  BINANCE_KEY_BINDING: { get: vi.fn().mockResolvedValue("binance-key") },
-  BINANCE_SECRET_BINDING: { get: vi.fn().mockResolvedValue("binance-secret") },
-  BYBIT_KEY_BINDING: { get: vi.fn().mockResolvedValue("bybit-key") },
-  BYBIT_SECRET_BINDING: { get: vi.fn().mockResolvedValue("bybit-secret") },
+  TELEGRAM_INTERNAL_KEY_BINDING: "test-telegram-key",
+  MEXC_KEY_BINDING: "mexc-key",
+  MEXC_SECRET_BINDING: "mexc-secret",
+  BINANCE_KEY_BINDING: "binance-key",
+  BINANCE_SECRET_BINDING: "binance-secret",
+  BYBIT_KEY_BINDING: "bybit-key",
+  BYBIT_SECRET_BINDING: "bybit-secret",
   D1_SERVICE: { fetch: vi.fn() }, // Mock service binding
   // Add mock constructors to env for dependency injection during tests
   __mocks__: {
@@ -366,12 +364,12 @@ describe("Trade Worker Helpers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset secret bindings for credential tests
-    mockEnv.MEXC_KEY_BINDING.get.mockResolvedValue("mexc-key");
-    mockEnv.MEXC_SECRET_BINDING.get.mockResolvedValue("mexc-secret");
-    mockEnv.BINANCE_KEY_BINDING.get.mockResolvedValue("binance-key");
-    mockEnv.BINANCE_SECRET_BINDING.get.mockResolvedValue("binance-secret");
-    mockEnv.BYBIT_KEY_BINDING.get.mockResolvedValue("bybit-key");
-    mockEnv.BYBIT_SECRET_BINDING.get.mockResolvedValue("bybit-secret");
+    mockEnv.MEXC_KEY_BINDING = "mexc-key";
+    mockEnv.MEXC_SECRET_BINDING = "mexc-secret";
+    mockEnv.BINANCE_KEY_BINDING = "binance-key";
+    mockEnv.BINANCE_SECRET_BINDING = "binance-secret";
+    mockEnv.BYBIT_KEY_BINDING = "bybit-key";
+    mockEnv.BYBIT_SECRET_BINDING = "bybit-secret";
   });
 
   describe("validateApiCredentials", () => {
@@ -386,11 +384,11 @@ describe("Trade Worker Helpers", () => {
     });
 
     it("should return false if key is missing for mexc", async () => {
-      mockEnv.MEXC_KEY_BINDING.get.mockResolvedValue(null);
+      mockEnv.MEXC_KEY_BINDING = null;
       expect(await validateApiCredentials("mexc", mockEnv)).toBe(false);
     });
     it("should return false if secret is missing for binance", async () => {
-      mockEnv.BINANCE_SECRET_BINDING.get.mockResolvedValue(null);
+      mockEnv.BINANCE_SECRET_BINDING = null;
       expect(await validateApiCredentials("binance", mockEnv)).toBe(false);
     });
     it("should return false if key binding itself is missing for bybit", async () => {
@@ -401,10 +399,6 @@ describe("Trade Worker Helpers", () => {
     });
     it("should return false for unknown exchange", async () => {
       expect(await validateApiCredentials("kraken", mockEnv)).toBe(false);
-    });
-    it("should return false if secret binding get throws error", async () => {
-      mockEnv.MEXC_SECRET_BINDING.get.mockRejectedValue(new Error("KV error"));
-      expect(await validateApiCredentials("mexc", mockEnv)).toBe(false);
     });
   });
 
@@ -559,12 +553,10 @@ describe("Trade Worker Handlers", () => {
     mockLogRequest.mockReset();
     mockLogResponse.mockReset();
     mockEnv.REPORTS_BUCKET.put.mockClear();
-    mockEnv.INTERNAL_KEY_BINDING.get.mockClear();
-    mockEnv.MEXC_KEY_BINDING.get.mockClear();
 
     // Reset specific mockEnv properties to their default values if they were overridden
-    mockEnv.INTERNAL_KEY_BINDING.get.mockResolvedValue("test-internal-key");
-    mockEnv.MEXC_KEY_BINDING.get.mockResolvedValue("mexc-key");
+    mockEnv.INTERNAL_KEY_BINDING = "test-internal-key";
+    mockEnv.MEXC_KEY_BINDING = "mexc-key";
 
     // Default successful mocks
     mockLogRequest.mockResolvedValue(logId);
@@ -649,7 +641,7 @@ describe("/process handler", () => {
     });
 
     it("should return 400 if API credentials are not configured for the exchange", async () => {
-      mockEnv.MEXC_KEY_BINDING.get.mockResolvedValue(null); // Simulate missing key
+      mockEnv.MEXC_KEY_BINDING = null; // Simulate missing key
       const request = createMockRequest("POST", "/webhook", validPayload);
       const response = await worker.fetch(request, mockEnv, {
         waitUntil: vi.fn(),
@@ -758,8 +750,6 @@ describe("/process handler", () => {
       const request = createMockRequest("POST", "/process", processPayload);
       await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
 
-      // Check auth was checked
-      expect(mockEnv.INTERNAL_KEY_BINDING.get).toHaveBeenCalled();
       // Check trade was executed
       expect(mockMexcClientConstructor).toHaveBeenCalled();
       expect(mockMexcClient.openLong).toHaveBeenCalled();

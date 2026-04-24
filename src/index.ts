@@ -11,27 +11,23 @@ import type { ExecutionContext } from "@cloudflare/workers-types";
 
 // --- Type Definitions ---
 
-interface SecretBinding {
-  get: () => Promise<string | null>;
-}
-
-// Define the expected environment variables and bindings
+// Define the expected environment variables and bindings from wrangler.toml
 interface Env {
-  DB: D1Database;
-  AI: Ai;
-  REPORTS_BUCKET: R2Bucket;
-  REPORT_KV?: KVNamespace;
+  // Database
+  DB?: D1Database;
+  
+  // KV Namespace
   CONFIG_KV?: KVNamespace;
-  D1_SERVICE?: Fetcher;
-  TELEGRAM_SERVICE?: Fetcher;
-  INTERNAL_KEY_BINDING?: SecretBinding;
-  TELEGRAM_INTERNAL_KEY_BINDING?: SecretBinding;
-  MEXC_KEY_BINDING?: SecretBinding;
-  MEXC_SECRET_BINDING?: SecretBinding;
-  BINANCE_KEY_BINDING?: SecretBinding;
-  BINANCE_SECRET_BINDING?: SecretBinding;
-  BYBIT_KEY_BINDING?: SecretBinding;
-  BYBIT_SECRET_BINDING?: SecretBinding;
+
+  // Secrets
+  INTERNAL_KEY_BINDING?: string;
+  TELEGRAM_INTERNAL_KEY_BINDING?: string;
+  MEXC_KEY_BINDING?: string;
+  MEXC_SECRET_BINDING?: string;
+  BINANCE_KEY_BINDING?: string;
+  BINANCE_SECRET_BINDING?: string;
+  BYBIT_KEY_BINDING?: string;
+  BYBIT_SECRET_BINDING?: string;
   TRADE_QUEUE?: Queue;
 
   // Optional Mocks for Testing
@@ -324,16 +320,14 @@ export async function validateApiCredentials(
   env: Env
 ): Promise<boolean> {
   const checkBinding = async (
-    keyBinding?: SecretBinding,
-    secretBinding?: SecretBinding
-  ): Promise<boolean> => {
-    if (!keyBinding || !secretBinding) return false;
+    keyBinding?: string,
+    secretBinding?: string
+  ) => {
     try {
-      const key = await keyBinding.get();
-      const secret = await secretBinding.get();
-      return key !== null && secret !== null;
-    } catch (e) {
-      console.error(`Error getting secret binding for ${exchange}:`, e);
+      const key = keyBinding;
+      const secret = secretBinding;
+      return !!key && !!secret;
+    } catch {
       return false;
     }
   };
@@ -563,22 +557,22 @@ async function executeTrade(
 
     switch (exchange.toLowerCase()) {
       case "mexc":
-        apiKey = (await env.MEXC_KEY_BINDING?.get()) ?? null;
-        apiSecret = (await env.MEXC_SECRET_BINDING?.get()) ?? null;
+        apiKey = env.MEXC_KEY_BINDING ?? null;
+        apiSecret = env.MEXC_SECRET_BINDING ?? null;
         if (!apiKey || !apiSecret)
           throw new Error("MEXC API secrets unavailable.");
         client = new MexcClientClass(apiKey, apiSecret);
         break;
       case "binance":
-        apiKey = (await env.BINANCE_KEY_BINDING?.get()) ?? null;
-        apiSecret = (await env.BINANCE_SECRET_BINDING?.get()) ?? null;
+        apiKey = env.BINANCE_KEY_BINDING ?? null;
+        apiSecret = env.BINANCE_SECRET_BINDING ?? null;
         if (!apiKey || !apiSecret)
           throw new Error("Binance API secrets unavailable.");
         client = new BinanceClientClass(apiKey, apiSecret);
         break;
       case "bybit":
-        apiKey = (await env.BYBIT_KEY_BINDING?.get()) ?? null;
-        apiSecret = (await env.BYBIT_SECRET_BINDING?.get()) ?? null;
+        apiKey = env.BYBIT_KEY_BINDING ?? null;
+        apiSecret = env.BYBIT_SECRET_BINDING ?? null;
         if (!apiKey || !apiSecret)
           throw new Error("Bybit API secrets unavailable.");
         client = new BybitClientClass(apiKey, apiSecret);
@@ -698,7 +692,7 @@ await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
 
         // Add internal auth key if configured
         if (env.TELEGRAM_INTERNAL_KEY_BINDING) {
-          const internalKey = await env.TELEGRAM_INTERNAL_KEY_BINDING.get();
+          const internalKey = env.TELEGRAM_INTERNAL_KEY_BINDING;
           if (internalKey) {
             telegramWorkerRequest.headers.set(
               "X-Internal-Auth-Key",
@@ -784,7 +778,7 @@ async function handleWebhookRequest(
 
     // Internal authentication check
     const internalAuthKey = request.headers.get("X-Internal-Auth-Key");
-    const expectedInternalKey = await env.INTERNAL_KEY_BINDING?.get();
+    const expectedInternalKey = env.INTERNAL_KEY_BINDING;
 
     if (!expectedInternalKey) {
       console.error("INTERNAL_KEY_BINDING not configured for /webhook endpoint.");
@@ -912,7 +906,7 @@ async function handleProcessRequest(
     // Pass the full original body data for logging
     dbLogId = await dbLogger.logRequest(request, data);
 
-    const expectedInternalKey = await env.INTERNAL_KEY_BINDING?.get();
+    const expectedInternalKey = env.INTERNAL_KEY_BINDING;
 
     if (!expectedInternalKey) {
       console.error(

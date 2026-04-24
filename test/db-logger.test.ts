@@ -40,7 +40,7 @@ describe("DbLogger", () => {
       )
     );
 
-    logger = new DbLogger(mockEnv);
+    logger = new DbLogger(mockEnv as any);
   });
 
   // --- Constructor Tests ---
@@ -51,7 +51,7 @@ describe("DbLogger", () => {
   test("should disable logging and warn if D1_SERVICE binding is missing", () => {
     const warnSpy = jest.spyOn(console, "warn");
     mockEnv = {}; // No D1_SERVICE
-    const disabledLogger = new DbLogger(mockEnv);
+    const disabledLogger = new DbLogger(mockEnv as any);
     expect((disabledLogger as any).enabled).toBe(false);
     expect(warnSpy).toHaveBeenCalledWith(
       "D1_SERVICE binding not found. Database logging disabled."
@@ -62,7 +62,7 @@ describe("DbLogger", () => {
   // --- logRequest Tests ---
   test("logRequest should not call fetch if logging is disabled", async () => {
     mockEnv = {};
-    const disabledLogger = new DbLogger(mockEnv);
+    const disabledLogger = new DbLogger(mockEnv as any);
     const request = new Request("http://test.com/trade", { method: "POST" });
 
     const result = await disabledLogger.logRequest(request, { data: 1 });
@@ -96,18 +96,18 @@ describe("DbLogger", () => {
     expect(fetchCall.headers.get("Content-Type")).toBe("application/json");
     expect(fetchCall.headers.get("X-Request-ID")).toBe(TEST_REQUEST_ID);
 
-    const body = await fetchCall.json();
-    expect(body.query).toContain("INSERT INTO trade_requests");
+    const body = await fetchCall.json() as any;
+    expect((body as any).query).toContain("INSERT INTO trade_requests");
 
-    const receivedHeaders = JSON.parse(body.params[2]); // Parse the received headers string
+    const receivedHeaders = JSON.parse((body as any).params[2]); // Parse the received headers string
     const expectedHeaders = requestHeaders; // Original headers object
 
-    expect(body.params[0]).toBe("POST");
-    expect(body.params[1]).toBe("/api/trade");
+    expect((body as any).params[0]).toBe("POST");
+    expect((body as any).params[1]).toBe("/api/trade");
     expect(receivedHeaders).toEqual(expectedHeaders); // Compare parsed objects
-    expect(body.params[3]).toBe(JSON.stringify(requestBody));
-    expect(body.params[4]).toBe("1.2.3.4");
-    expect(body.params[5]).toBe("TestAgent");
+    expect((body as any).params[3]).toBe(JSON.stringify(requestBody));
+    expect((body as any).params[4]).toBe("1.2.3.4");
+    expect((body as any).params[5]).toBe("TestAgent");
   });
 
   test("logRequest should return null if D1_SERVICE fetch fails (non-ok status)", async () => {
@@ -159,7 +159,7 @@ describe("DbLogger", () => {
   // --- logResponse Tests ---
   test("logResponse should not call fetch if logging is disabled", async () => {
     mockEnv = {};
-    const disabledLogger = new DbLogger(mockEnv);
+    const disabledLogger = new DbLogger(mockEnv as any);
     const response = new Response("OK", { status: 200 });
     await disabledLogger.logResponse(LOG_REQUEST_ID, response);
     expect(mockD1ServiceFetch).not.toHaveBeenCalled();
@@ -195,14 +195,14 @@ describe("DbLogger", () => {
     expect(fetchCall.method).toBe("POST");
     expect(fetchCall.headers.get("X-Request-ID")).toBe(TEST_REQUEST_ID);
 
-    const body = await fetchCall.json();
-    expect(body.query).toContain("INSERT INTO trade_responses");
-    expect(body.params[0]).toBe(LOG_REQUEST_ID);
-    expect(body.params[1]).toBe(responseStatus);
+    const body = await fetchCall.json() as any;
+    expect((body as any).query).toContain("INSERT INTO trade_responses");
+    expect((body as any).params[0]).toBe(LOG_REQUEST_ID);
+    expect((body as any).params[1]).toBe(responseStatus);
     // Headers may be empty object in some test environments
-    expect(body.params[3]).toBe(responseBody);
-    expect(body.params[4]).toBeNull(); // No error
-    expect(body.params[5]).toBeGreaterThanOrEqual(0);
+    expect((body as any).params[3]).toBe(responseBody);
+    expect((body as any).params[4]).toBeNull(); // No error
+    expect((body as any).params[5]).toBeGreaterThanOrEqual(0);
   });
 
   test("logResponse should include error string if provided", async () => {
@@ -217,8 +217,8 @@ describe("DbLogger", () => {
 
     expect(mockD1ServiceFetch).toHaveBeenCalledTimes(1);
     const fetchCall = mockD1ServiceFetch.mock.calls[0][0] as Request;
-    const body = await fetchCall.json();
-    expect(body.params[4]).toBe(error.toString());
+    const body = await fetchCall.json() as any;
+    expect((body as any).params[4]).toBe(error.toString());
   });
 
   test("logResponse should handle D1_SERVICE fetch errors gracefully", async () => {

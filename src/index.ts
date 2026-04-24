@@ -1,14 +1,13 @@
-import { MexcClient, type IMexcClient } from "./mexc-client"; // Removed .js
-import { BinanceClient, type IBinanceClient } from "./binance-client"; // Removed .js
-import { BybitClient, type IBybitClient } from "./bybit-client"; // Removed .js
-import { DbLogger, type IDbLogger } from "./db-logger"; // Removed .js
-import type { KVNamespace } from "@cloudflare/workers-types"; // Import KVNamespace
-import { logKvTimestamp, type EnvWithKV } from "../../src/utils/kvUtils"; // Original relative path
-import type { R2Bucket } from "@cloudflare/workers-types"; // Import R2Bucket type
-import { ExecutionContext } from "@cloudflare/workers"; // Import ExecutionContext
-import type { Ai } from "@cloudflare/ai"; // Import the Ai type
-import type { D1Database } from "@cloudflare/workers-types"; // Import D1Database type
-import type { Queue, QueueEvent, MessageSendRequest } from "@cloudflare/workers-types";
+import { MexcClient, type IMexcClient } from "./mexc-client";
+import { BinanceClient, type IBinanceClient } from "./binance-client";
+import { BybitClient, type IBybitClient } from "./bybit-client";
+import { DbLogger, type IDbLogger } from "./db-logger";
+import type { KVNamespace } from "@cloudflare/workers-types";
+import type { R2Bucket } from "@cloudflare/workers-types";
+import type { D1Database } from "@cloudflare/workers-types";
+import type { Queue, QueueEvent, MessageSendRequest, Fetcher } from "@cloudflare/workers-types";
+import type { Ai } from "@cloudflare/ai";
+import type { ExecutionContext } from "@cloudflare/workers-types";
 
 // --- Type Definitions ---
 
@@ -17,23 +16,22 @@ interface SecretBinding {
 }
 
 // Define the expected environment variables and bindings
-interface Env extends EnvWithKV {
-  DB: D1Database; // Add the D1 binding
-  AI: Ai; // Add the AI binding
-  REPORTS_BUCKET: R2Bucket; // Add R2 binding for reports
-  // CONFIG_KV: KVNamespace; // Inherited from EnvWithKV
-  // Bindings from wrangler.toml
-  D1_SERVICE?: Fetcher; // Service binding for d1-worker
-  TELEGRAM_SERVICE?: Fetcher; // Service binding for telegram-worker
-  INTERNAL_KEY_BINDING?: SecretBinding; // For internal auth (expects WEBHOOK_INTERNAL_KEY)
-  TELEGRAM_INTERNAL_KEY_BINDING?: SecretBinding; // For telegram service auth
+interface Env {
+  DB: D1Database;
+  AI: Ai;
+  REPORTS_BUCKET: R2Bucket;
+  REPORT_KV?: KVNamespace;
+  CONFIG_KV?: KVNamespace;
+  D1_SERVICE?: Fetcher;
+  TELEGRAM_SERVICE?: Fetcher;
+  INTERNAL_KEY_BINDING?: SecretBinding;
+  TELEGRAM_INTERNAL_KEY_BINDING?: SecretBinding;
   MEXC_KEY_BINDING?: SecretBinding;
   MEXC_SECRET_BINDING?: SecretBinding;
   BINANCE_KEY_BINDING?: SecretBinding;
   BINANCE_SECRET_BINDING?: SecretBinding;
   BYBIT_KEY_BINDING?: SecretBinding;
   BYBIT_SECRET_BINDING?: SecretBinding;
-  // Queue consumer
   TRADE_QUEUE?: Queue;
 
   // Optional Mocks for Testing
@@ -95,25 +93,109 @@ interface ValidationResult {
 // Standardized response structure
 interface StandardResponse {
   success: boolean;
-  result?: any; // Data returned on success
-  error?: string | null; // Error message on failure
+  result?: unknown;
+  error?: string | null;
 }
 
 // Structure for storing trade signals in D1
 interface TradeSignalRecord {
-  signal_id: string; // UUID
-  timestamp: number; // Unix timestamp
+  signal_id: string;
+  timestamp: number;
   symbol: string;
-  signal_type: "BUY" | "SELL" | "HOLD" | "CLOSE" | string; // Allow other types
+  signal_type: string;
   source?: string;
-  raw_data?: string; // JSON stringified payload
+  raw_data?: string;
 }
 
 // --- Constants ---
-
+const MAX_RETRIES = 5;
+const BACKOFF_DELAYS = [0, 30, 60, 300, 900]; // 0s, 30s, 1m, 5m, 15m
 const PROCESS_ENDPOINT = "/process"; // For legacy/direct calls with internal key
 const WEBHOOK_ENDPOINT = "/webhook"; // For calls from hoox via Service Binding
 const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
+
+// --- Queue Consumer Helper Functions ---
+
+async function handleTestAiRequest(request: Request, env: Env): Promise<Response> {
+  try {
+    if (!env.AI) {
+      return new Response(JSON.stringify({ error: "AI not configured" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    
+    const body = await request.json() as { prompt?: string };
+    const response = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+      messages: [{ role: "user", content: body.prompt || "Say hello" }],
+    });
+    
+    return new Response(JSON.stringify({ success: true, result: response }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: String(error) }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+async function executeTradeFromQueue(
+  trade: TradeQueueMessage,
+  env: Env
+): Promise<{ success: boolean; result?: unknown; error?: string }> {
+  try {
+    const payload: WebhookPayload = {
+      exchange: trade.exchange,
+      action: trade.action as WebhookPayload['action'],
+      symbol: trade.symbol,
+      quantity: trade.quantity,
+      price: trade.price,
+      leverage: trade.leverage,
+    };
+    
+    const dbLogger = new DbLogger(env as any);
+    const startTime = Date.now();
+    const response = await executeTrade(payload, env, dbLogger, startTime, null);
+    const result = await response.json() as { success?: boolean; result?: unknown; error?: string };
+    
+    return {
+      success: result.success ?? false,
+      result: result.result,
+      error: result.error,
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMsg };
+  }
+}
+
+async function logFailedTrade(
+  trade: TradeQueueMessage,
+  errorMsg: string,
+  env: Env
+): Promise<void> {
+  try {
+    if (env.D1_SERVICE) {
+      const logPayload = {
+        query: `INSERT INTO system_logs (level, source, message, details) VALUES (?, ?, ?, ?)`,
+        params: ["ERROR", "queue-consumer", `Trade failed: ${trade.requestId}`, JSON.stringify({ trade, error: errorMsg })],
+      };
+      
+      await env.D1_SERVICE.fetch(
+        new Request("http://d1-service/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(logPayload),
+        }) as any
+      );
+    }
+  } catch (e) {
+    console.error("Failed to log failed trade:", e);
+  }
+}
 
 // --- Worker Definition ---
 
@@ -197,7 +279,7 @@ export default {
     console.log(`[QueueHandler] Received ${messages.length} message(s)`);
 
     for (const msg of messages) {
-      const trade = msg.body;
+      const trade = (msg as unknown as { body: QueueMessage }).body;
       console.log(`[QueueHandler] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`);
 
       const retryCount = (msg as any).retry?.count || 0;
@@ -554,11 +636,11 @@ async function executeTrade(
                JSON.stringify(result)
             ]
          };
-         await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify(tradePayload)
-         }));
+await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(tradePayload)
+          }) as any);
 
          // Update or insert into positions table
          const side = action.includes('LONG') ? 'LONG' : 'SHORT';
@@ -577,11 +659,11 @@ async function executeTrade(
                 Math.floor(Date.now() / 1000)
              ]
          };
-         await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify(posPayload)
-         }));
+await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(posPayload)
+          }) as any);
       } catch (e) {
          console.error("Failed to update D1 trades and positions tables", e);
       }
@@ -629,7 +711,7 @@ async function executeTrade(
           `[${dbLogId}] Calling TELEGRAM_SERVICE for notification...`
         );
         const notificationResponse = await env.TELEGRAM_SERVICE.fetch(
-          telegramWorkerRequest
+          telegramWorkerRequest as any
         );
         if (!notificationResponse.ok) {
           console.error(
@@ -686,7 +768,7 @@ async function handleWebhookRequest(
   const startTime = Date.now();
   // Use mock or real DbLogger
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
-  const dbLogger = new DbLoggerClass(env);
+  const dbLogger = new DbLoggerClass(env as any);
   let dbLogId: number | null = null;
   const incomingRequestId =
     request.headers.get("X-Request-ID") || crypto.randomUUID();
@@ -811,7 +893,7 @@ async function handleProcessRequest(
 ): Promise<Response> {
   const startTime = Date.now();
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
-  const dbLogger = new DbLoggerClass(env);
+  const dbLogger = new DbLoggerClass(env as any);
   let dbLogId: number | null = null;
   let incomingRequestId: string | undefined;
 
@@ -979,15 +1061,12 @@ async function handleGetReportRequest(
     );
 
     // Prepare headers for the response
-    const headers = new Headers();
+    const headers = new Headers() as any;
     object.writeHttpMetadata(headers);
     headers.set("etag", object.httpEtag);
-    // Optional: Set Content-Disposition to suggest a filename
-    // const filename = key.split('/').pop() || 'download';
-    // headers.set('content-disposition', `attachment; filename="${filename}"`);
 
     // Stream the body back
-    return new Response(object.body, {
+    return new Response(object.body as any, {
       headers,
     });
   } catch (error: unknown) {
@@ -1218,22 +1297,19 @@ interface TradeQueueMessage {
   queuedAt: string;
 }
 
-const MAX_RETRIES = 5;
-const BACKOFF_DELAYS = [0, 30, 60, 300, 900]; // 0s, 30s, 1m, 5m, 15m
-
 export const queue = async (
-  messages: MessageEvent<TradeQueueMessage>[],
+  messages: QueueEvent<TradeQueueMessage>[],
   env: Env,
   ctx: ExecutionContext
 ): Promise<void> => {
   console.log(`[Queue] Received ${messages.length} message(s)`);
 
   for (const msg of messages) {
-    const trade = msg.body;
+    const trade = (msg as unknown as { body: TradeQueueMessage }).body;
     console.log(`[Queue] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`);
 
     // Get retry count from message metadata
-    const retryCount = msg.retry?.count || 0;
+    const retryCount = (msg as { retry?: { count: number } }).retry?.count || 0;
 
     try {
       // Execute the trade
@@ -1255,7 +1331,7 @@ export const queue = async (
         console.log(`[Queue] Scheduling retry for ${trade.requestId} in ${delaySeconds}s (attempt ${retryCount + 2})`);
 
         // Re-queue with delay using the message's retry mechanism
-        msg.retry({
+        (msg as any).retry?.({
           delaySeconds,
         });
       } else {
@@ -1293,7 +1369,7 @@ async function sendTradeNotification(
         body: JSON.stringify({
           message,
         }),
-      })
+      }) as any
     );
   } catch (e) {
     console.error("[Queue] Failed to send notification:", e);

@@ -151,7 +151,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any); // Pass mock context if needed
 
       expect(response.status).toBe(201);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toHaveProperty("signalId");
       expect(mockPrepare).toHaveBeenCalledWith(
@@ -177,7 +177,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
 
       const response = await worker.fetch(request, mockEnv, {} as any);
       expect(response.status).toBe(400);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Invalid JSON");
       expect(mockRun).not.toHaveBeenCalled();
@@ -189,7 +189,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(400);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Missing required fields");
       expect(mockRun).not.toHaveBeenCalled();
@@ -206,7 +206,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(500);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Failed to store signal");
       expect(mockRun).toHaveBeenCalledTimes(1);
@@ -223,7 +223,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(500);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Internal server error");
       expect(mockRun).toHaveBeenCalledTimes(1);
@@ -261,7 +261,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual(mockSignalResults);
       expect(mockPrepare).toHaveBeenCalledWith(
@@ -281,7 +281,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual([mockSignalResults[0]]);
       expect(mockBind).toHaveBeenCalledWith(1); // Specified limit
@@ -295,7 +295,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual([]);
       expect(mockAll).toHaveBeenCalledTimes(1);
@@ -305,7 +305,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const request = createMockRequest("GET", "/api/signals?limit=abc");
       const response = await worker.fetch(request, mockEnv, {} as any);
       expect(response.status).toBe(400);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Invalid limit");
       expect(mockAll).not.toHaveBeenCalled();
@@ -334,7 +334,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(500);
-      const responseBody = await response.json();
+      const responseBody = await response.json() as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Internal server error");
       expect(mockAll).toHaveBeenCalledTimes(1);
@@ -585,7 +585,7 @@ describe("/process handler", () => {
       } as any);
 
       expect(response.status).toBe(200);
-      const body = await response.json();
+      const body = await response.json() as any;
       expect(body.success).toBe(true);
       expect(body.result).toEqual({ orderId: "mexc123" });
 
@@ -639,7 +639,7 @@ describe("/process handler", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      const body = await response.json();
+      const body = await response.json() as any;
       expect(body.success).toBe(false);
       expect(body.error).toContain("Invalid quantity");
       expect(mockLogRequest).toHaveBeenCalled(); // Still logs the bad request
@@ -656,7 +656,7 @@ describe("/process handler", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      const body = await response.json();
+      const body = await response.json() as any;
       expect(body.success).toBe(false);
       expect(body.error).toContain("API secret bindings not configured");
     });
@@ -690,7 +690,7 @@ describe("/process handler", () => {
       } as any);
 
       expect(response.status).toBe(500);
-      const body = await response.json();
+      const body = await response.json() as any;
       expect(body.success).toBe(false);
       expect(body.error).toContain(tradeError.message);
       expect(mockLogResponse).toHaveBeenCalledWith(
@@ -718,8 +718,7 @@ describe("/process handler", () => {
     });
 
     it("should skip leverage setting if leverage not in payload", async () => {
-      const noLeveragePayload = { ...validPayload };
-      delete noLeveragePayload.leverage;
+      const noLeveragePayload = { ...validPayload, leverage: undefined };
       const request = createMockRequest("POST", "/process", noLeveragePayload);
 
       await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
@@ -776,7 +775,7 @@ describe("/process handler", () => {
         waitUntil: vi.fn(),
       } as any);
       expect(response.status).toBe(403);
-      const body = await response.json();
+      const body = await response.json() as any;
       expect(body.error).toBe("Authentication failed");
     });
 
@@ -787,7 +786,7 @@ describe("/process handler", () => {
         waitUntil: vi.fn(),
       } as any);
       expect(response.status).toBe(500);
-      const body = await response.json();
+      const body = await response.json() as any;
       expect(body.error).toBe("Service configuration error");
     });
 
@@ -805,7 +804,7 @@ describe("/process handler", () => {
         waitUntil: vi.fn(),
       } as any);
       expect(response.status).toBe(400);
-      const body = await response.json();
+      const body = await response.json() as any;
       expect(body.error).toContain("Invalid action");
     });
   });

@@ -30,7 +30,7 @@
 // This should align with the Env interface in index.ts
 interface LoggerEnv {
   D1_SERVICE?: Fetcher;
-  // Add other env vars if DbLogger uses them
+  [key: string]: unknown;
 }
 
 // Interface defining the DbLogger's capabilities (optional but good practice)
@@ -158,23 +158,24 @@ export class DbLogger implements IDbLogger {
 
     try {
       const executionTime = startTime ? Date.now() - startTime : null;
-      // Safely get headers, handling potential differences in mock/real Response objects
-      let headersObject: any = {};
-      if (response.headers && typeof response.headers.entries === "function") {
+      // Safely get headers using forEach which is the standard method
+      let headersObject: Record<string, string> = {};
+      if (response.headers) {
         try {
-          headersObject = DbLogger.headersToObject(response.headers);
+          response.headers.forEach((value, key) => {
+            headersObject[key] = value;
+          });
           const sensitiveHeaders = ["authorization", "x-internal-auth-key", "cookie"];
           for (const h of sensitiveHeaders) {
             if (headersObject[h]) headersObject[h] = "[REDACTED]";
           }
         } catch (e) {
-          console.error("Failed to get headers using entries():", e);
+          console.error("Failed to get headers:", e);
         }
       } else {
         console.warn(
-          "response.headers.entries is not a function or headers missing for logResponse"
+          "response.headers is missing for logResponse"
         );
-        // Attempt to get headers another way if possible, or accept it might be missing
       }
 
       const responseBody = response.body ? await response.clone().text() : null; // Get body safely

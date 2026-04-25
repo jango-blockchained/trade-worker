@@ -28,16 +28,19 @@
 
 // Define Env structure expected by the logger
 // This should align with the Env interface in index.ts
+import type { R2Bucket, Fetcher } from "@cloudflare/workers-types";
+
 interface LoggerEnv {
   D1_SERVICE?: Fetcher;
+  SYSTEM_LOGS_BUCKET?: R2Bucket;
   [key: string]: unknown;
 }
 
 // Interface defining the DbLogger's capabilities (optional but good practice)
 export interface IDbLogger {
-  logRequest(request: Request, requestBody: any): Promise<number | null>;
+  logRequest(request: Request, requestBody: any): Promise<string | null>;
   logResponse(
-    requestId: number | null,
+    requestId: string | null,
     response: Response,
     error?: Error | null,
     startTime?: number
@@ -45,7 +48,7 @@ export interface IDbLogger {
 }
 
 /**
- * Database logging utility for trade worker using D1 Service Binding.
+ * Database logging utility for trade worker using R2.
  */
 export class DbLogger implements IDbLogger {
   private env: LoggerEnv;
@@ -53,9 +56,9 @@ export class DbLogger implements IDbLogger {
 
   constructor(env: LoggerEnv) {
     this.env = env;
-    this.enabled = !!env.D1_SERVICE;
+    this.enabled = !!env.SYSTEM_LOGS_BUCKET;
     if (!this.enabled) {
-      console.warn("D1_SERVICE binding not found. Database logging disabled.");
+      console.warn("SYSTEM_LOGS_BUCKET binding not found. Verbose request logging disabled.");
     }
   }
 
@@ -68,13 +71,13 @@ export class DbLogger implements IDbLogger {
   }
 
   /**
-   * Logs request details to the database.
+   * Logs request details to R2.
    * @param request The incoming Request object.
    * @param requestBody The parsed body of the request (can be any type).
    * @returns The ID of the inserted request log record, or null if disabled/failed.
    */
-  async logRequest(request: Request, requestBody: any): Promise<number | null> {
-    if (!this.enabled || !this.env.D1_SERVICE) return null;
+  async logRequest(request: Request, requestBody: any): Promise<string | null> {
+    if (!this.enabled || !this.env.SYSTEM_LOGS_BUCKET) return null;
 
     try {
       const headers = DbLogger.headersToObject(request.headers);
@@ -93,72 +96,50 @@ export class DbLogger implements IDbLogger {
         }
       }
 
+      const logId = crypto.randomUUID();
       const logPayload = {
-        query: `INSERT INTO trade_requests
-                         (method, path, headers, body, source_ip, user_agent)
-                         VALUES (?, ?, ?, ?, ?, ?)`,
-        params: [
-          request.method,
-          new URL(request.url).pathname,
-          JSON.stringify(redactedHeaders),
-          JSON.stringify(redactedBody), // Assumes body is JSON-serializable
-          request.headers.get("cf-connecting-ip") || "unknown",
-          request.headers.get("user-agent") || "unknown",
-        ],
+        type: "request",
+        id: logId,
+        timestamp: new Date().toISOString(),
+        method: request.method,
+        path: new URL(request.url).pathname,
+        headers: redactedHeaders,
+        body: redactedBody,
+        source_ip: request.headers.get("cf-connecting-ip") || "unknown",
+        user_agent: request.headers.get("user-agent") || "unknown",
       };
 
-      // Construct request to D1 worker via service binding
-      const serviceRequest = new Request(`https://d1-service/query`, {
-        // Dummy URL, path matters
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Request-ID": crypto.randomUUID(), // Unique ID for this specific log operation
-        },
-        body: JSON.stringify(logPayload),
+      const dateStr = new Date().toISOString().split("T")[0];
+      const filename = `requests/${dateStr}/${logId}.json`;
+
+      await this.env.SYSTEM_LOGS_BUCKET.put(filename, JSON.stringify(logPayload, null, 2), {
+        httpMetadata: { contentType: "application/json" }
       });
 
-      const d1Response = await this.env.D1_SERVICE.fetch(serviceRequest);
-
-      if (!d1Response.ok) {
-        console.error(
-          "Failed to log request via D1_SERVICE:",
-          await d1Response.text()
-        );
-        return null;
-      }
-
-      // Assuming D1 worker returns { success: boolean, lastRowId?: number }
-      const result: { success: boolean; lastRowId?: number } =
-        await d1Response.json();
-      console.log(
-        `Request log result: Success=${result.success}, ID=${result.lastRowId}`
-      );
-      return result.success && result.lastRowId ? result.lastRowId : null;
+      return logId;
     } catch (error: any) {
-      console.error("Error logging request via D1_SERVICE:", error);
+      console.error("Error logging request via R2:", error);
       return null;
     }
   }
 
   /**
-   * Logs response details to the database.
+   * Logs response details to R2.
    * @param requestId The ID of the corresponding request log record.
    * @param response The Response object sent back to the client.
    * @param error Optional error object if the request failed.
    * @param startTime Optional start timestamp (ms) to calculate execution time.
    */
   async logResponse(
-    requestId: number | null,
+    requestId: string | null,
     response: Response,
     error: Error | null = null,
     startTime?: number
   ): Promise<void> {
-    if (!this.enabled || !this.env.D1_SERVICE || requestId === null) return;
+    if (!this.enabled || !this.env.SYSTEM_LOGS_BUCKET || requestId === null) return;
 
     try {
       const executionTime = startTime ? Date.now() - startTime : null;
-      // Safely get headers using forEach which is the standard method
       let headersObject: Record<string, string> = {};
       if (response.headers) {
         try {
@@ -173,49 +154,33 @@ export class DbLogger implements IDbLogger {
           console.error("Failed to get headers:", e);
         }
       } else {
-        console.warn(
-          "response.headers is missing for logResponse"
-        );
+        console.warn("response.headers is missing for logResponse");
       }
 
-      const responseBody = response.body ? await response.clone().text() : null; // Get body safely
+      const responseBody = response.body ? await response.clone().text() : null;
       const errorString = error ? error.toString() : null;
 
       const logPayload = {
-        query: `INSERT INTO trade_responses
-                         (request_id, status_code, headers, body, error, execution_time_ms)
-                         VALUES (?, ?, ?, ?, ?, ?)`,
-        params: [
-          requestId,
-          response.status,
-          JSON.stringify(headersObject),
-          responseBody,
-          errorString,
-          executionTime,
-        ],
+        type: "response",
+        request_id: requestId,
+        timestamp: new Date().toISOString(),
+        status_code: response.status,
+        headers: headersObject,
+        body: responseBody,
+        error: errorString,
+        execution_time_ms: executionTime,
       };
 
-      const serviceRequest = new Request(`https://d1-service/query`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Request-ID": crypto.randomUUID(),
-        },
-        body: JSON.stringify(logPayload),
+      const dateStr = new Date().toISOString().split("T")[0];
+      const filename = `responses/${dateStr}/${requestId}.json`;
+
+      await this.env.SYSTEM_LOGS_BUCKET.put(filename, JSON.stringify(logPayload, null, 2), {
+        httpMetadata: { contentType: "application/json" }
       });
 
-      const d1Response = await this.env.D1_SERVICE.fetch(serviceRequest);
-
-      if (!d1Response.ok) {
-        console.error(
-          "Failed to log response via D1_SERVICE:",
-          await d1Response.text()
-        );
-      }
-      // We don't usually need the result of the response log insert
       console.log(`Logged response for request ID: ${requestId}`);
     } catch (error: any) {
-      console.error("Error logging response via D1_SERVICE:", error);
+      console.error("Error logging response via R2:", error);
     }
   }
 }

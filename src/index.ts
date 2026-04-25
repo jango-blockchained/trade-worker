@@ -2,6 +2,7 @@ import { MexcClient, type IMexcClient } from "./mexc-client";
 import { BinanceClient, type IBinanceClient } from "./binance-client";
 import { BybitClient, type IBybitClient } from "./bybit-client";
 import { DbLogger, type IDbLogger } from "./db-logger";
+import { ExchangeRouter } from "./exchange-router";
 import type { KVNamespace } from "@cloudflare/workers-types";
 import type { R2Bucket } from "@cloudflare/workers-types";
 import type { D1Database } from "@cloudflare/workers-types";
@@ -12,7 +13,7 @@ import type { ExecutionContext } from "@cloudflare/workers-types";
 // --- Type Definitions ---
 
 // Define the expected environment variables and bindings from wrangler.toml
-interface Env {
+export interface Env {
   // Database
   DB?: D1Database;
   
@@ -48,7 +49,7 @@ interface Env {
 }
 
 // Generic client interface (adapt based on actual client methods)
-interface IExchangeClient {
+export interface IExchangeClient {
   getAccountInfo: () => Promise<any>;
   setLeverage?: (symbol: string, leverage: number) => Promise<any>;
   openLong: (
@@ -68,7 +69,7 @@ interface IExchangeClient {
 }
 
 // Payload structure for incoming webhook requests
-interface WebhookPayload {
+export interface WebhookPayload {
   exchange: string;
   action: "LONG" | "SHORT" | "CLOSE_LONG" | "CLOSE_SHORT";
   symbol: string;
@@ -431,7 +432,7 @@ function createJsonResponse(
 export async function saveReportToR2(
   reportData: any, // The trade result or formatted report data
   payload: WebhookPayload,
-  dbLogId: number | null,
+  dbLogId: string | null, // Changed to string
   env: Env
 ): Promise<void> {
   if (!env.REPORTS_BUCKET) {
@@ -497,7 +498,7 @@ async function executeTrade(
   env: Env,
   dbLogger: IDbLogger,
   startTime: number,
-  dbLogId: number | null // Assuming logRequest returns a number ID
+  dbLogId: string | null // Changed to string
 ): Promise<Response> {
   try {
     const {
@@ -539,50 +540,21 @@ async function executeTrade(
     }
     // --- End Risk Management ---
 
-    if (!(await validateApiCredentials(exchange, env))) {
-      const errorMsg = `API secret bindings not configured or accessible for ${exchange}`;
-      console.error(errorMsg);
-      const response = createJsonResponse(
-        { success: false, error: errorMsg },
-        400
-      );
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
-      return response;
-    }
-
-    let apiKey: string | null = null;
-    let apiSecret: string | null = null;
+    const router = new ExchangeRouter();
+    
     let client: IExchangeClient;
+    let routedExchange = exchange;
 
-    // Use provided mock clients if available, otherwise create real ones
-    const MexcClientClass = env.__mocks__?.MexcClient || MexcClient;
-    const BinanceClientClass = env.__mocks__?.BinanceClient || BinanceClient;
-    const BybitClientClass = env.__mocks__?.BybitClient || BybitClient;
-
-    switch (exchange.toLowerCase()) {
-      case "mexc":
-        apiKey = env.MEXC_KEY_BINDING ?? null;
-        apiSecret = env.MEXC_SECRET_BINDING ?? null;
-        if (!apiKey || !apiSecret)
-          throw new Error("MEXC API secrets unavailable.");
-        client = new MexcClientClass(apiKey, apiSecret);
-        break;
-      case "binance":
-        apiKey = env.BINANCE_KEY_BINDING ?? null;
-        apiSecret = env.BINANCE_SECRET_BINDING ?? null;
-        if (!apiKey || !apiSecret)
-          throw new Error("Binance API secrets unavailable.");
-        client = new BinanceClientClass(apiKey, apiSecret);
-        break;
-      case "bybit":
-        apiKey = env.BYBIT_KEY_BINDING ?? null;
-        apiSecret = env.BYBIT_SECRET_BINDING ?? null;
-        if (!apiKey || !apiSecret)
-          throw new Error("Bybit API secrets unavailable.");
-        client = new BybitClientClass(apiKey, apiSecret);
-        break;
-      default:
-        throw new Error(`Unsupported exchange: ${exchange}`);
+    try {
+        const routeResult = await router.route(payload, env);
+        client = routeResult.client;
+        routedExchange = routeResult.exchange;
+    } catch (e: any) {
+        const errorMsg = e.message || `Failed to route exchange: ${exchange}`;
+        console.error(errorMsg);
+        const response = createJsonResponse({ success: false, error: errorMsg }, 400);
+        await dbLogger.logResponse(dbLogId, response, null, startTime);
+        return response;
     }
 
     if (client.setLeverage && overriddenLeverage) {
@@ -624,7 +596,7 @@ async function executeTrade(
             params: [
                tradeId,
                Math.floor(Date.now() / 1000),
-               exchange,
+               routedExchange,
                symbol,
                action,
                quantity,
@@ -643,13 +615,13 @@ await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
          // Update or insert into positions table
          const side = action.includes('LONG') ? 'LONG' : 'SHORT';
          const posStatus = action.startsWith('CLOSE') ? 'CLOSED' : 'OPEN';
-         const posId = `${exchange}-${symbol}-${side}`;
+         const posId = `${routedExchange}-${symbol}-${side}`;
          
          const posPayload = {
              query: `REPLACE INTO positions (id, exchange, symbol, side, size, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
              params: [
                 posId,
-                exchange,
+                routedExchange,
                 symbol,
                 side,
                 posStatus === 'OPEN' ? quantity : 0, // Simplify size logic for now
@@ -678,8 +650,8 @@ await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
     if (env.TELEGRAM_SERVICE) {
       try {
         const notificationMessage = result?.success
-          ? `Trade executed successfully on ${exchange}: ${action} ${quantity} ${symbol}. Result: ${JSON.stringify(result.result)}`
-          : `Trade execution failed on ${exchange}: ${action} ${quantity} ${symbol}. Error: ${result?.error || "Unknown error"}`;
+          ? `Trade executed successfully on ${routedExchange}: ${action} ${quantity} ${symbol}. Result: ${JSON.stringify(result.result)}`
+          : `Trade execution failed on ${routedExchange}: ${action} ${quantity} ${symbol}. Error: ${result?.error || "Unknown error"}`;
 
         const telegramPayload = {
           message: notificationMessage,
@@ -767,7 +739,7 @@ async function handleWebhookRequest(
   // Use mock or real DbLogger
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
   const dbLogger = new DbLoggerClass(env as any);
-  let dbLogId: number | null = null;
+  let dbLogId: string | null = null;
   const incomingRequestId =
     request.headers.get("X-Request-ID") || crypto.randomUUID();
 
@@ -892,7 +864,7 @@ async function handleProcessRequest(
   const startTime = Date.now();
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
   const dbLogger = new DbLoggerClass(env as any);
-  let dbLogId: number | null = null;
+  let dbLogId: string | null = null;
   let incomingRequestId: string | undefined;
 
   try {

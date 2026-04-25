@@ -8,6 +8,7 @@ declare namespace Cloudflare {
 	interface Env {
 		CONFIG_KV: KVNamespace;
 		REPORTS_BUCKET: R2Bucket;
+		SYSTEM_LOGS_BUCKET: R2Bucket;
 		DB: D1Database;
 		VECTORIZE_INDEX: VectorizeIndex;
 		BROWSER: Fetcher;

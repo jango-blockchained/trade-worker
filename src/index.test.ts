@@ -349,7 +349,7 @@ describe("Trade Worker Helpers", () => {
   let saveReportToR2: (
     reportData: any,
     payload: any,
-    dbLogId: number | null,
+    dbLogId: string | null,
     env: any
   ) => Promise<void>;
 
@@ -479,7 +479,7 @@ describe("Trade Worker Helpers", () => {
   describe("saveReportToR2", () => {
     const reportData = { tradeId: "123", status: "success" };
     const payload = { exchange: "mexc", symbol: "BTC_USDT", action: "LONG" };
-    const dbLogId = 987;
+    const dbLogId = "987";
 
     it("should call R2 put with correct key and data", async () => {
       await saveReportToR2(reportData, payload, dbLogId, mockEnv);

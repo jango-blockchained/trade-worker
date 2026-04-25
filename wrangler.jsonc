@@ -39,6 +39,10 @@
     {
       "binding": "REPORTS_BUCKET",
       "bucket_name": "trade-reports"
+    },
+    {
+      "binding": "SYSTEM_LOGS_BUCKET",
+      "bucket_name": "hoox-system-logs"
     }
   ],
   "vectorize": [

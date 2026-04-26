@@ -117,32 +117,6 @@ const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
 
 // --- Queue Consumer Helper Functions ---
 
-async function handleTestAiRequest(request: Request, env: Env): Promise<Response> {
-  try {
-    if (!env.AI) {
-      return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    
-    const body = await request.json() as { prompt?: string };
-    const response = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
-      messages: [{ role: "user", content: body.prompt || "Say hello" }],
-    });
-    
-    return new Response(JSON.stringify({ success: true, result: response }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    return new Response(JSON.stringify({ success: false, error: String(error) }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-}
-
 async function executeTradeFromQueue(
   trade: TradeQueueMessage,
   env: Env
@@ -218,7 +192,6 @@ export default {
     ctx: ExecutionContext
   ): Promise<Response> {
     const url = new URL(request.url);
-    const debugEndpointsEnabled = env.ENABLE_DEBUG_ENDPOINTS === "true";
 
     // Handle queue consumer invocations
     if (request.method === "POST" && url.pathname === "/queue") {
@@ -254,15 +227,7 @@ export default {
       );
     }
 
-    // --- Add temporary GET endpoint for testing AI ---
-    if (request.method === "GET" && url.pathname === "/test-ai") {
-      if (!debugEndpointsEnabled) {
-        return new Response("Debug endpoints not enabled", { status: 403 });
-      }
-      return handleTestAiRequest(request, env);
-    }
-
-    // --- Process Trade Webhook ---
+    
     if (request.method === "POST" && url.pathname === WEBHOOK_ENDPOINT) {
       return await handleWebhookRequest(request, env, ctx);
     }

@@ -27,7 +27,9 @@
     "wrangler": "^4.83.0"
   },
   "vitest": {
-    "include": ["src/index.test.ts"],
+    "include": [
+      "src/index.test.ts"
+    ],
     "config": "./vitest.config.ts"
   }
 }

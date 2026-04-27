@@ -6,7 +6,12 @@ import { ExchangeRouter } from "./exchange-router";
 import type { KVNamespace } from "@cloudflare/workers-types";
 import type { R2Bucket } from "@cloudflare/workers-types";
 import type { D1Database } from "@cloudflare/workers-types";
-import type { Queue, QueueEvent, MessageSendRequest, Fetcher } from "@cloudflare/workers-types";
+import type {
+  Queue,
+  QueueEvent,
+  MessageSendRequest,
+  Fetcher,
+} from "@cloudflare/workers-types";
 import type { Ai } from "@cloudflare/ai";
 import type { ExecutionContext } from "@cloudflare/workers-types";
 
@@ -16,7 +21,7 @@ import type { ExecutionContext } from "@cloudflare/workers-types";
 export interface Env {
   // Database
   DB?: D1Database;
-  
+
   // KV Namespace
   CONFIG_KV?: KVNamespace;
 
@@ -124,18 +129,28 @@ async function executeTradeFromQueue(
   try {
     const payload: WebhookPayload = {
       exchange: trade.exchange,
-      action: trade.action as WebhookPayload['action'],
+      action: trade.action as WebhookPayload["action"],
       symbol: trade.symbol,
       quantity: trade.quantity,
       price: trade.price,
       leverage: trade.leverage,
     };
-    
+
     const dbLogger = new DbLogger(env as any);
     const startTime = Date.now();
-    const response = await executeTrade(payload, env, dbLogger, startTime, null);
-    const result = await response.json() as { success?: boolean; result?: unknown; error?: string };
-    
+    const response = await executeTrade(
+      payload,
+      env,
+      dbLogger,
+      startTime,
+      null
+    );
+    const result = (await response.json()) as {
+      success?: boolean;
+      result?: unknown;
+      error?: string;
+    };
+
     return {
       success: result.success ?? false,
       result: result.result,
@@ -156,9 +171,14 @@ async function logFailedTrade(
     if (env.D1_SERVICE) {
       const logPayload = {
         query: `INSERT INTO system_logs (level, source, message, details) VALUES (?, ?, ?, ?)`,
-        params: ["ERROR", "queue-consumer", `Trade failed: ${trade.requestId}`, JSON.stringify({ trade, error: errorMsg })],
+        params: [
+          "ERROR",
+          "queue-consumer",
+          `Trade failed: ${trade.requestId}`,
+          JSON.stringify({ trade, error: errorMsg }),
+        ],
       };
-      
+
       await env.D1_SERVICE.fetch(
         new Request("http://d1-service/query", {
           method: "POST",
@@ -227,7 +247,6 @@ export default {
       );
     }
 
-    
     if (request.method === "POST" && url.pathname === WEBHOOK_ENDPOINT) {
       return await handleWebhookRequest(request, env, ctx);
     }
@@ -246,7 +265,9 @@ export default {
 
     for (const msg of messages) {
       const trade = (msg as unknown as { body: QueueMessage }).body;
-      console.log(`[QueueHandler] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`);
+      console.log(
+        `[QueueHandler] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`
+      );
 
       const retryCount = (msg as any).retry?.count || 0;
 
@@ -261,19 +282,29 @@ export default {
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(`[QueueHandler] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`);
+        console.error(
+          `[QueueHandler] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`
+        );
 
         if (retryCount < MAX_RETRIES) {
-          const delaySeconds = BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
-          console.log(`[QueueHandler] Scheduling retry for ${trade.requestId} in ${delaySeconds}s`);
+          const delaySeconds =
+            BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
+          console.log(
+            `[QueueHandler] Scheduling retry for ${trade.requestId} in ${delaySeconds}s`
+          );
 
           (msg as any).retry?.({
             delaySeconds,
           });
         } else {
-          console.error(`[QueueHandler] Max retries exceeded for ${trade.requestId}`);
+          console.error(
+            `[QueueHandler] Max retries exceeded for ${trade.requestId}`
+          );
           await logFailedTrade(trade, errorMsg, env);
-          await sendTradeNotification(trade, env, { success: false, error: errorMsg });
+          await sendTradeNotification(trade, env, {
+            success: false,
+            error: errorMsg,
+          });
         }
       }
     }
@@ -289,10 +320,7 @@ export async function validateApiCredentials(
   exchange: string,
   env: Env
 ): Promise<boolean> {
-  const checkBinding = async (
-    keyBinding?: string,
-    secretBinding?: string
-  ) => {
+  const checkBinding = async (keyBinding?: string, secretBinding?: string) => {
     try {
       const key = keyBinding;
       const secret = secretBinding;
@@ -479,47 +507,55 @@ async function executeTrade(
     // --- Risk Management via CONFIG_KV ---
     let overriddenLeverage = leverage;
     let maxPositionSize: number | null = null;
-    
+
     try {
-        if (env.CONFIG_KV) {
-            const defaultLevStr = await env.CONFIG_KV.get('trade:default_leverage');
-            if (defaultLevStr && !overriddenLeverage) {
-               overriddenLeverage = parseInt(defaultLevStr, 10);
-               console.log(`[Risk Management] Applied default leverage: ${overriddenLeverage}`);
-            }
-            const maxSizeStr = await env.CONFIG_KV.get('trade:max_position_size');
-            if (maxSizeStr) {
-               maxPositionSize = parseFloat(maxSizeStr);
-            }
+      if (env.CONFIG_KV) {
+        const defaultLevStr = await env.CONFIG_KV.get("trade:default_leverage");
+        if (defaultLevStr && !overriddenLeverage) {
+          overriddenLeverage = parseInt(defaultLevStr, 10);
+          console.log(
+            `[Risk Management] Applied default leverage: ${overriddenLeverage}`
+          );
         }
-    } catch(e) {
-        console.error("Failed to fetch risk management settings from KV:", e);
+        const maxSizeStr = await env.CONFIG_KV.get("trade:max_position_size");
+        if (maxSizeStr) {
+          maxPositionSize = parseFloat(maxSizeStr);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch risk management settings from KV:", e);
     }
 
     if (maxPositionSize !== null && quantity > maxPositionSize) {
-        const errorMsg = `Trade quantity (${quantity}) exceeds maximum allowed size (${maxPositionSize})`;
-        console.error(errorMsg);
-        const response = createJsonResponse({ success: false, error: errorMsg }, 400);
-        await dbLogger.logResponse(dbLogId, response, null, startTime);
-        return response;
+      const errorMsg = `Trade quantity (${quantity}) exceeds maximum allowed size (${maxPositionSize})`;
+      console.error(errorMsg);
+      const response = createJsonResponse(
+        { success: false, error: errorMsg },
+        400
+      );
+      await dbLogger.logResponse(dbLogId, response, null, startTime);
+      return response;
     }
     // --- End Risk Management ---
 
     const router = new ExchangeRouter();
-    
+
     let client: IExchangeClient;
     let routedExchange = exchange;
 
     try {
-        const routeResult = await router.route(payload, env);
-        client = routeResult.client;
-        routedExchange = routeResult.exchange;
+      const routeResult = await router.route(payload, env);
+      client = routeResult.client;
+      routedExchange = routeResult.exchange;
     } catch (e: any) {
-        const errorMsg = e.message || `Failed to route exchange: ${exchange}`;
-        console.error(errorMsg);
-        const response = createJsonResponse({ success: false, error: errorMsg }, 400);
-        await dbLogger.logResponse(dbLogId, response, null, startTime);
-        return response;
+      const errorMsg = e.message || `Failed to route exchange: ${exchange}`;
+      console.error(errorMsg);
+      const response = createJsonResponse(
+        { success: false, error: errorMsg },
+        400
+      );
+      await dbLogger.logResponse(dbLogId, response, null, startTime);
+      return response;
     }
 
     if (client.setLeverage && overriddenLeverage) {
@@ -549,58 +585,62 @@ async function executeTrade(
     }
 
     console.log("Trade execution successful:", result);
-    
+
     // --- Update D1 Tables (Trades and Positions) ---
     if (env.D1_SERVICE) {
       try {
-         const tradeId = crypto.randomUUID();
-         const tradeStatus = 'EXECUTED'; // Assuming success if it reached here
-         
-         const tradePayload = {
-            query: `INSERT INTO trades (id, timestamp, exchange, symbol, action, quantity, price, leverage, status, raw_response) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            params: [
-               tradeId,
-               Math.floor(Date.now() / 1000),
-               routedExchange,
-               symbol,
-               action,
-               quantity,
-               price || null,
-               overriddenLeverage || null,
-               tradeStatus,
-               JSON.stringify(result)
-            ]
-         };
-await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(tradePayload)
-          }) as any);
+        const tradeId = crypto.randomUUID();
+        const tradeStatus = "EXECUTED"; // Assuming success if it reached here
 
-         // Update or insert into positions table
-         const side = action.includes('LONG') ? 'LONG' : 'SHORT';
-         const posStatus = action.startsWith('CLOSE') ? 'CLOSED' : 'OPEN';
-         const posId = `${routedExchange}-${symbol}-${side}`;
-         
-         const posPayload = {
-             query: `REPLACE INTO positions (id, exchange, symbol, side, size, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-             params: [
-                posId,
-                routedExchange,
-                symbol,
-                side,
-                posStatus === 'OPEN' ? quantity : 0, // Simplify size logic for now
-                posStatus,
-                Math.floor(Date.now() / 1000)
-             ]
-         };
-await env.D1_SERVICE.fetch(new Request('http://d1-service/query', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(posPayload)
-          }) as any);
+        const tradePayload = {
+          query: `INSERT INTO trades (id, timestamp, exchange, symbol, action, quantity, price, leverage, status, raw_response) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          params: [
+            tradeId,
+            Math.floor(Date.now() / 1000),
+            routedExchange,
+            symbol,
+            action,
+            quantity,
+            price || null,
+            overriddenLeverage || null,
+            tradeStatus,
+            JSON.stringify(result),
+          ],
+        };
+        await env.D1_SERVICE.fetch(
+          new Request("http://d1-service/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(tradePayload),
+          }) as any
+        );
+
+        // Update or insert into positions table
+        const side = action.includes("LONG") ? "LONG" : "SHORT";
+        const posStatus = action.startsWith("CLOSE") ? "CLOSED" : "OPEN";
+        const posId = `${routedExchange}-${symbol}-${side}`;
+
+        const posPayload = {
+          query: `REPLACE INTO positions (id, exchange, symbol, side, size, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          params: [
+            posId,
+            routedExchange,
+            symbol,
+            side,
+            posStatus === "OPEN" ? quantity : 0, // Simplify size logic for now
+            posStatus,
+            Math.floor(Date.now() / 1000),
+          ],
+        };
+        await env.D1_SERVICE.fetch(
+          new Request("http://d1-service/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(posPayload),
+          }) as any
+        );
       } catch (e) {
-         console.error("Failed to update D1 trades and positions tables", e);
+        console.error("Failed to update D1 trades and positions tables", e);
       }
     }
 
@@ -722,7 +762,9 @@ async function handleWebhookRequest(
     const expectedInternalKey = env.INTERNAL_KEY_BINDING;
 
     if (!expectedInternalKey) {
-      console.error("INTERNAL_KEY_BINDING not configured for /webhook endpoint.");
+      console.error(
+        "INTERNAL_KEY_BINDING not configured for /webhook endpoint."
+      );
       const response = createJsonResponse(
         { success: false, error: "Service configuration error" },
         500
@@ -732,7 +774,9 @@ async function handleWebhookRequest(
     }
 
     if (!internalAuthKey || internalAuthKey !== expectedInternalKey) {
-      console.warn(`Authentication failed for webhook request ID: ${incomingRequestId}`);
+      console.warn(
+        `Authentication failed for webhook request ID: ${incomingRequestId}`
+      );
       const response = createJsonResponse(
         { success: false, error: "Unauthorized" },
         403
@@ -1241,7 +1285,9 @@ export const queue = async (
 
   for (const msg of messages) {
     const trade = (msg as unknown as { body: TradeQueueMessage }).body;
-    console.log(`[Queue] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`);
+    console.log(
+      `[Queue] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`
+    );
 
     // Get retry count from message metadata
     const retryCount = (msg as { retry?: { count: number } }).retry?.count || 0;
@@ -1259,24 +1305,34 @@ export const queue = async (
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`[Queue] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`);
+      console.error(
+        `[Queue] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`
+      );
 
       if (retryCount < MAX_RETRIES) {
-        const delaySeconds = BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
-        console.log(`[Queue] Scheduling retry for ${trade.requestId} in ${delaySeconds}s (attempt ${retryCount + 2})`);
+        const delaySeconds =
+          BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
+        console.log(
+          `[Queue] Scheduling retry for ${trade.requestId} in ${delaySeconds}s (attempt ${retryCount + 2})`
+        );
 
         // Re-queue with delay using the message's retry mechanism
         (msg as any).retry?.({
           delaySeconds,
         });
       } else {
-        console.error(`[Queue] Max retries exceeded for ${trade.requestId}, moving to DLQ`);
+        console.error(
+          `[Queue] Max retries exceeded for ${trade.requestId}, moving to DLQ`
+        );
 
         // Log failure to D1 for tracking
         await logFailedTrade(trade, errorMsg, env);
 
         // Send failure notification
-        await sendTradeNotification(trade, env, { success: false, error: errorMsg });
+        await sendTradeNotification(trade, env, {
+          success: false,
+          error: errorMsg,
+        });
       }
     }
   }

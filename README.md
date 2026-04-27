@@ -2,9 +2,9 @@
 
 **Last Updated:** April 2026
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Runtime](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh) [![Platform](https://img.shields.io/badge/Platform-Cloudflare®%20Edge%20Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/) [![License](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/) [![Build Status](https://github.com/jango-blockchained/hoox-setup/actions/workflows/opencode.yml/badge.svg)](https://github.com/jango-blockchained/hoox-setup/actions/workflows/opencode.yml) 
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Runtime](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh) [![Platform](https://img.shields.io/badge/Platform-Cloudflare®%20Edge%20Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/) [![License](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/) [![Build Status](https://github.com/jango-blockchained/hoox-setup/actions/workflows/opencode.yml/badge.svg)](https://github.com/jango-blockchained/hoox-setup/actions/workflows/opencode.yml)
 
-**[Main Repository](https://github.com/jango-blockchained/hoox-setup)** 
+**[Main Repository](https://github.com/jango-blockchained/hoox-setup)**
 
 A Cloudflare® Worker service for executing cryptocurrency trades, logging signals, and potentially leveraging AI/RAG for strategy analysis. This worker interacts directly with exchange APIs, D1, R2, and potentially AI services.
 
@@ -70,15 +70,15 @@ A Cloudflare® Worker service for executing cryptocurrency trades, logging signa
         {
           "binding": "DB",
           "database_name": "trade-data-db",
-          "database_id": "<YOUR_D1_DB_ID>"
-        }
+          "database_id": "<YOUR_D1_DB_ID>",
+        },
       ],
       "r2_buckets": [
-        { "binding": "REPORTS_BUCKET", "bucket_name": "trade-reports" }
+        { "binding": "REPORTS_BUCKET", "bucket_name": "trade-reports" },
       ],
       "kv_namespaces": [
         // Example: If using KV for config/state
-        { "binding": "CONFIG_KV", "id": "...", "preview_id": "..." }
+        { "binding": "CONFIG_KV", "id": "...", "preview_id": "..." },
       ],
       "vectorize": [
         // Example: If using RAG
@@ -89,21 +89,22 @@ A Cloudflare® Worker service for executing cryptocurrency trades, logging signa
         // "binding": "AI"
       },
       "queues": {
-        "consumers": [
-          { "queue": "trade-execution" }
-        ]
+        "consumers": [{ "queue": "trade-execution" }],
       },
       "secrets": [
         "INTERNAL_KEY_BINDING",
-        "MEXC_API_KEY", "MEXC_API_SECRET",
-        "BINANCE_API_KEY", "BINANCE_API_SECRET",
-        "BYBIT_API_KEY", "BYBIT_API_SECRET"
+        "MEXC_API_KEY",
+        "MEXC_API_SECRET",
+        "BINANCE_API_KEY",
+        "BINANCE_API_SECRET",
+        "BYBIT_API_KEY",
+        "BYBIT_API_SECRET",
         // Add other secrets
       ],
       "observability": {
-         "enabled": true,
-         "head_sampling_rate": 1
-       }
+        "enabled": true,
+        "head_sampling_rate": 1,
+      },
     }
     ```
 7.  Update the corresponding `worker-configuration.d.ts` file.
@@ -116,7 +117,7 @@ A Cloudflare® Worker service for executing cryptocurrency trades, logging signa
     # ... (add other exchange keys/secrets as needed)
     # Add mock bindings for D1, R2, KV etc. if needed locally
     ```
-    *Note: Use `wrangler d1 execute ... --local` and `wrangler dev --local` for local D1.* 
+    _Note: Use `wrangler d1 execute ... --local` and `wrangler dev --local` for local D1._
 
 ## Development
 
@@ -171,7 +172,9 @@ Accepts requests from authenticated internal services (like `hoox`) to perform a
   ```json
   {
     "success": true,
-    "result": { /* Exchange-specific order details or action result */ },
+    "result": {
+      /* Exchange-specific order details or action result */
+    },
     "error": null
   }
   ```
@@ -228,7 +231,6 @@ The worker includes error handling for:
 4. Push to the branch
 5. Create a new Pull Request
 
-
 ---
 
-*Cloudflare® and the Cloudflare logo are trademarks and/or registered trademarks of Cloudflare, Inc. in the United States and other jurisdictions.*
+_Cloudflare® and the Cloudflare logo are trademarks and/or registered trademarks of Cloudflare, Inc. in the United States and other jurisdictions._

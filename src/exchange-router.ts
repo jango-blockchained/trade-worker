@@ -14,7 +14,8 @@ export class BinanceProvider implements IExchangeProvider {
   createClient(env: Env): IExchangeClient {
     const apiKey = env.BINANCE_KEY_BINDING;
     const apiSecret = env.BINANCE_SECRET_BINDING;
-    if (!apiKey || !apiSecret) throw new Error("Binance API secrets unavailable.");
+    if (!apiKey || !apiSecret)
+      throw new Error("Binance API secrets unavailable.");
     const ClientClass = env.__mocks__?.BinanceClient || BinanceClient;
     return new ClientClass(apiKey, apiSecret);
   }
@@ -42,7 +43,8 @@ export class BybitProvider implements IExchangeProvider {
   createClient(env: Env): IExchangeClient {
     const apiKey = env.BYBIT_KEY_BINDING;
     const apiSecret = env.BYBIT_SECRET_BINDING;
-    if (!apiKey || !apiSecret) throw new Error("Bybit API secrets unavailable.");
+    if (!apiKey || !apiSecret)
+      throw new Error("Bybit API secrets unavailable.");
     const ClientClass = env.__mocks__?.BybitClient || BybitClient;
     return new ClientClass(apiKey, apiSecret);
   }
@@ -64,18 +66,23 @@ export class ExchangeRouter {
     this.providers.set(provider.name.toLowerCase(), provider);
   }
 
-  async route(payload: WebhookPayload, env: Env): Promise<{ exchange: string, client: IExchangeClient }> {
+  async route(
+    payload: WebhookPayload,
+    env: Env
+  ): Promise<{ exchange: string; client: IExchangeClient }> {
     let exchange = payload.exchange.toLowerCase();
 
     // Check KV for dynamic routing
     if (env.CONFIG_KV) {
       try {
-        const routingTableStr = await env.CONFIG_KV.get('trade:routing');
+        const routingTableStr = await env.CONFIG_KV.get("trade:routing");
         if (routingTableStr) {
           const routingTable = JSON.parse(routingTableStr);
           if (routingTable[payload.symbol]) {
             exchange = routingTable[payload.symbol].toLowerCase();
-            console.log(`[Router] Dynamic route for ${payload.symbol} to ${exchange}`);
+            console.log(
+              `[Router] Dynamic route for ${payload.symbol} to ${exchange}`
+            );
           }
         }
       } catch (e) {
@@ -89,7 +96,9 @@ export class ExchangeRouter {
     }
 
     if (!provider.hasCredentials(env)) {
-      throw new Error(`API secret bindings not configured or accessible for ${exchange}`);
+      throw new Error(
+        `API secret bindings not configured or accessible for ${exchange}`
+      );
     }
 
     return { exchange, client: provider.createClient(env) };

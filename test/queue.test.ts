@@ -26,11 +26,11 @@ describe("Trade Worker - Queue Consumer", () => {
   });
 
   test("should have correct backoff delays", () => {
-    expect(BACKOFF_DELAYS[0]).toBe(0);      // Immediate
-    expect(BACKOFF_DELAYS[1]).toBe(30);     // 30 seconds
-    expect(BACKOFF_DELAYS[2]).toBe(60);     // 1 minute
-    expect(BACKOFF_DELAYS[3]).toBe(300);   // 5 minutes
-    expect(BACKOFF_DELAYS[4]).toBe(900);   // 15 minutes
+    expect(BACKOFF_DELAYS[0]).toBe(0); // Immediate
+    expect(BACKOFF_DELAYS[1]).toBe(30); // 30 seconds
+    expect(BACKOFF_DELAYS[2]).toBe(60); // 1 minute
+    expect(BACKOFF_DELAYS[3]).toBe(300); // 5 minutes
+    expect(BACKOFF_DELAYS[4]).toBe(900); // 15 minutes
   });
 
   test("should have correct MAX_RETRIES value", () => {
@@ -191,7 +191,11 @@ describe("Trade Worker - Queue Failure Handling", () => {
       return `❌ Trade Failed (Queue): ${action} ${symbol} - ${error}`;
     };
 
-    const message = createFailureMessage("LONG", "BTCUSDT", "Insufficient balance");
+    const message = createFailureMessage(
+      "LONG",
+      "BTCUSDT",
+      "Insufficient balance"
+    );
     expect(message).toContain("❌");
     expect(message).toContain("Trade Failed");
     expect(message).toContain("LONG");

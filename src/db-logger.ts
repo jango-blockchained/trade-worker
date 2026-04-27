@@ -58,7 +58,9 @@ export class DbLogger implements IDbLogger {
     this.env = env;
     this.enabled = !!env.SYSTEM_LOGS_BUCKET;
     if (!this.enabled) {
-      console.warn("SYSTEM_LOGS_BUCKET binding not found. Verbose request logging disabled.");
+      console.warn(
+        "SYSTEM_LOGS_BUCKET binding not found. Verbose request logging disabled."
+      );
     }
   }
 
@@ -82,7 +84,11 @@ export class DbLogger implements IDbLogger {
     try {
       const headers = DbLogger.headersToObject(request.headers);
       const redactedHeaders = { ...headers };
-      const sensitiveHeaders = ["authorization", "x-internal-auth-key", "cookie"];
+      const sensitiveHeaders = [
+        "authorization",
+        "x-internal-auth-key",
+        "cookie",
+      ];
       for (const h of sensitiveHeaders) {
         if (redactedHeaders[h]) redactedHeaders[h] = "[REDACTED]";
       }
@@ -90,7 +96,13 @@ export class DbLogger implements IDbLogger {
       let redactedBody = requestBody;
       if (typeof requestBody === "object" && requestBody !== null) {
         redactedBody = { ...requestBody };
-        const sensitiveFields = ["internalAuthKey", "apiKey", "password", "secret", "token"];
+        const sensitiveFields = [
+          "internalAuthKey",
+          "apiKey",
+          "password",
+          "secret",
+          "token",
+        ];
         for (const field of sensitiveFields) {
           if (field in redactedBody) redactedBody[field] = "[REDACTED]";
         }
@@ -112,9 +124,13 @@ export class DbLogger implements IDbLogger {
       const dateStr = new Date().toISOString().split("T")[0];
       const filename = `requests/${dateStr}/${logId}.json`;
 
-      await this.env.SYSTEM_LOGS_BUCKET.put(filename, JSON.stringify(logPayload, null, 2), {
-        httpMetadata: { contentType: "application/json" }
-      });
+      await this.env.SYSTEM_LOGS_BUCKET.put(
+        filename,
+        JSON.stringify(logPayload, null, 2),
+        {
+          httpMetadata: { contentType: "application/json" },
+        }
+      );
 
       return logId;
     } catch (error: any) {
@@ -136,7 +152,8 @@ export class DbLogger implements IDbLogger {
     error: Error | null = null,
     startTime?: number
   ): Promise<void> {
-    if (!this.enabled || !this.env.SYSTEM_LOGS_BUCKET || requestId === null) return;
+    if (!this.enabled || !this.env.SYSTEM_LOGS_BUCKET || requestId === null)
+      return;
 
     try {
       const executionTime = startTime ? Date.now() - startTime : null;
@@ -146,7 +163,11 @@ export class DbLogger implements IDbLogger {
           response.headers.forEach((value, key) => {
             headersObject[key] = value;
           });
-          const sensitiveHeaders = ["authorization", "x-internal-auth-key", "cookie"];
+          const sensitiveHeaders = [
+            "authorization",
+            "x-internal-auth-key",
+            "cookie",
+          ];
           for (const h of sensitiveHeaders) {
             if (headersObject[h]) headersObject[h] = "[REDACTED]";
           }
@@ -174,9 +195,13 @@ export class DbLogger implements IDbLogger {
       const dateStr = new Date().toISOString().split("T")[0];
       const filename = `responses/${dateStr}/${requestId}.json`;
 
-      await this.env.SYSTEM_LOGS_BUCKET.put(filename, JSON.stringify(logPayload, null, 2), {
-        httpMetadata: { contentType: "application/json" }
-      });
+      await this.env.SYSTEM_LOGS_BUCKET.put(
+        filename,
+        JSON.stringify(logPayload, null, 2),
+        {
+          httpMetadata: { contentType: "application/json" },
+        }
+      );
 
       console.log(`Logged response for request ID: ${requestId}`);
     } catch (error: any) {

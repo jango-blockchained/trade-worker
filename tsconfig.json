@@ -1,22 +1,22 @@
 {
   "compilerOptions": {
-    "target": "ES2022",                      // Use modern ECMAScript features
-    "module": "ESNext",                       // Use ES modules
-    "moduleResolution": "Bundler",            // Modern module resolution for bundlers
-    "lib": ["ES2022"],                        // Include libraries for modern JS features
-    "jsx": "react-jsx",                       // Standard JSX processing (harmless if unused)
-    "strict": true,                           // Enable all strict type-checking options
-    "esModuleInterop": true,                  // Improve compatibility between CJS and ESM
-    "skipLibCheck": true,                     // Skip type checking of declaration files
+    "target": "ES2022", // Use modern ECMAScript features
+    "module": "ESNext", // Use ES modules
+    "moduleResolution": "Bundler", // Modern module resolution for bundlers
+    "lib": ["ES2022"], // Include libraries for modern JS features
+    "jsx": "react-jsx", // Standard JSX processing (harmless if unused)
+    "strict": true, // Enable all strict type-checking options
+    "esModuleInterop": true, // Improve compatibility between CJS and ESM
+    "skipLibCheck": true, // Skip type checking of declaration files
     "forceConsistentCasingInFileNames": true, // Enforce consistent file naming
-    "resolveJsonModule": true,                // Allow importing JSON files
-    "allowJs": true,                          // Allow JavaScript files to be included
-    "checkJs": false,                         // Do not type-check JS files by default
-    "noEmit": true,                           // Prevent TypeScript from emitting files (Wrangler handles this)
-    "isolatedModules": true,                  // Ensure modules can be transpiled independently
+    "resolveJsonModule": true, // Allow importing JSON files
+    "allowJs": true, // Allow JavaScript files to be included
+    "checkJs": false, // Do not type-check JS files by default
+    "noEmit": true, // Prevent TypeScript from emitting files (Wrangler handles this)
+    "isolatedModules": true, // Ensure modules can be transpiled independently
     "types": [], // Removed @cloudflare/workers-types
-    "rootDir": "./src"                        // Specify the root directory of source files
+    "rootDir": "./src" // Specify the root directory of source files
   },
-  "include": ["src/**/*"],                  // Include all files within the src directory
+  "include": ["src/**/*"], // Include all files within the src directory
   "exclude": ["node_modules", "dist", "test"] // Exclude standard folders
-} 
+}

@@ -83,7 +83,7 @@ describe("DbLogger", () => {
     const putCallArgs = mockR2Put.mock.calls[0];
     expect(putCallArgs[0]).toContain(`requests/`);
     expect(putCallArgs[0]).toContain(`${TEST_REQUEST_ID}.json`);
-    
+
     const payload = JSON.parse(putCallArgs[1]);
     expect(payload.type).toBe("request");
     expect(payload.id).toBe(TEST_REQUEST_ID);
@@ -137,11 +137,11 @@ describe("DbLogger", () => {
     await logger.logResponse(TEST_REQUEST_ID, response, error, startTime);
 
     expect(mockR2Put).toHaveBeenCalledTimes(1);
-    
+
     const putCallArgs = mockR2Put.mock.calls[0];
     expect(putCallArgs[0]).toContain(`responses/`);
     expect(putCallArgs[0]).toContain(`${TEST_REQUEST_ID}.json`);
-    
+
     const payload = JSON.parse(putCallArgs[1]);
     expect(payload.type).toBe("response");
     expect(payload.request_id).toBe(TEST_REQUEST_ID);

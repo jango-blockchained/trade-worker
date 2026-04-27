@@ -1,4 +1,12 @@
-import { describe, it, expect, mock, beforeEach, beforeAll, jest as vi } from "bun:test";
+import {
+  describe,
+  it,
+  expect,
+  mock,
+  beforeEach,
+  beforeAll,
+  jest as vi,
+} from "bun:test";
 import worker, {
   validateApiCredentials,
   validateTradePayload,
@@ -49,7 +57,12 @@ const mockEnv = {
     // Add other necessary D1 methods if used, e.g., batch, dump
   },
   // Add other necessary env bindings with mocks or dummy values
-  CONFIG_KV: { get: vi.fn().mockResolvedValue(null), put: vi.fn(), list: vi.fn(), delete: vi.fn() },
+  CONFIG_KV: {
+    get: vi.fn().mockResolvedValue(null),
+    put: vi.fn(),
+    list: vi.fn(),
+    delete: vi.fn(),
+  },
   AI: { run: vi.fn() },
   REPORTS_BUCKET: {
     put: vi.fn(),
@@ -99,12 +112,12 @@ function createMockRequest(
   if (addInternalAuth) {
     headerObj.set("X-Internal-Auth-Key", "test-internal-key");
   }
-  
+
   let finalBody = body;
   if (urlPath === "/process" && body) {
     finalBody = {
       internalAuthKey: addInternalAuth ? "test-internal-key" : undefined,
-      payload: body
+      payload: body,
     };
   }
 
@@ -149,7 +162,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any); // Pass mock context if needed
 
       expect(response.status).toBe(201);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toHaveProperty("signalId");
       expect(mockPrepare).toHaveBeenCalledWith(
@@ -175,7 +188,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
 
       const response = await worker.fetch(request, mockEnv, {} as any);
       expect(response.status).toBe(400);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Invalid JSON");
       expect(mockRun).not.toHaveBeenCalled();
@@ -187,7 +200,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(400);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Missing required fields");
       expect(mockRun).not.toHaveBeenCalled();
@@ -204,7 +217,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(500);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Failed to store signal");
       expect(mockRun).toHaveBeenCalledTimes(1);
@@ -221,7 +234,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(500);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Internal server error");
       expect(mockRun).toHaveBeenCalledTimes(1);
@@ -259,7 +272,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual(mockSignalResults);
       expect(mockPrepare).toHaveBeenCalledWith(
@@ -279,7 +292,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual([mockSignalResults[0]]);
       expect(mockBind).toHaveBeenCalledWith(1); // Specified limit
@@ -293,7 +306,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual([]);
       expect(mockAll).toHaveBeenCalledTimes(1);
@@ -303,7 +316,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const request = createMockRequest("GET", "/api/signals?limit=abc");
       const response = await worker.fetch(request, mockEnv, {} as any);
       expect(response.status).toBe(400);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Invalid limit");
       expect(mockAll).not.toHaveBeenCalled();
@@ -332,7 +345,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const response = await worker.fetch(request, mockEnv, {} as any);
 
       expect(response.status).toBe(500);
-      const responseBody = await response.json() as any;
+      const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain("Internal server error");
       expect(mockAll).toHaveBeenCalledTimes(1);
@@ -566,7 +579,7 @@ describe("Trade Worker Handlers", () => {
     mockMexcClient.setLeverage.mockResolvedValue({}); // Assume leverage set succeeds
   });
 
-describe("/process handler", () => {
+  describe("/process handler", () => {
     it("should validate payload, log, init client, set leverage, execute trade, log response, and save report", async () => {
       const request = createMockRequest("POST", "/process", validPayload);
       const startTime = Date.now();
@@ -577,7 +590,7 @@ describe("/process handler", () => {
       } as any);
 
       expect(response.status).toBe(200);
-      const body = await response.json() as any;
+      const body = (await response.json()) as any;
       expect(body.success).toBe(true);
       expect(body.result).toEqual({ orderId: "mexc123" });
 
@@ -631,7 +644,7 @@ describe("/process handler", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      const body = await response.json() as any;
+      const body = (await response.json()) as any;
       expect(body.success).toBe(false);
       expect(body.error).toContain("Invalid quantity");
       expect(mockLogRequest).toHaveBeenCalled(); // Still logs the bad request
@@ -648,7 +661,7 @@ describe("/process handler", () => {
       } as any);
 
       expect(response.status).toBe(400);
-      const body = await response.json() as any;
+      const body = (await response.json()) as any;
       expect(body.success).toBe(false);
       expect(body.error).toContain("API secret bindings not configured");
     });
@@ -682,7 +695,7 @@ describe("/process handler", () => {
       } as any);
 
       expect(response.status).toBe(500);
-      const body = await response.json() as any;
+      const body = (await response.json()) as any;
       expect(body.success).toBe(false);
       expect(body.error).toContain(tradeError.message);
       expect(mockLogResponse).toHaveBeenCalledWith(
@@ -720,21 +733,39 @@ describe("/process handler", () => {
     });
 
     it("should return 403 if X-Internal-Auth-Key is missing", async () => {
-      const request = createMockRequest("POST", "/process", validPayload, {}, false);
-      const response = await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
+      const request = createMockRequest(
+        "POST",
+        "/process",
+        validPayload,
+        {},
+        false
+      );
+      const response = await worker.fetch(request, mockEnv, {
+        waitUntil: vi.fn(),
+      } as any);
       expect(response.status).toBe(403);
     });
 
     it("should return 403 if X-Internal-Auth-Key is invalid", async () => {
-      const request = createMockRequest("POST", "/process", validPayload, { "X-Internal-Auth-Key": "wrong-key" }, false);
-      const response = await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
+      const request = createMockRequest(
+        "POST",
+        "/process",
+        validPayload,
+        { "X-Internal-Auth-Key": "wrong-key" },
+        false
+      );
+      const response = await worker.fetch(request, mockEnv, {
+        waitUntil: vi.fn(),
+      } as any);
       expect(response.status).toBe(403);
     });
 
     it("should return 500 if INTERNAL_KEY_BINDING is not configured", async () => {
       const envNoKey = { ...mockEnv, INTERNAL_KEY_BINDING: undefined };
       const request = createMockRequest("POST", "/process", validPayload);
-      const response = await worker.fetch(request, envNoKey, { waitUntil: vi.fn() } as any);
+      const response = await worker.fetch(request, envNoKey, {
+        waitUntil: vi.fn(),
+      } as any);
       expect(response.status).toBe(500);
     });
   });
@@ -765,7 +796,7 @@ describe("/process handler", () => {
         waitUntil: vi.fn(),
       } as any);
       expect(response.status).toBe(403);
-      const body = await response.json() as any;
+      const body = (await response.json()) as any;
       expect(body.error).toBe("Authentication failed");
     });
 
@@ -776,7 +807,7 @@ describe("/process handler", () => {
         waitUntil: vi.fn(),
       } as any);
       expect(response.status).toBe(500);
-      const body = await response.json() as any;
+      const body = (await response.json()) as any;
       expect(body.error).toBe("Service configuration error");
     });
 
@@ -794,7 +825,7 @@ describe("/process handler", () => {
         waitUntil: vi.fn(),
       } as any);
       expect(response.status).toBe(400);
-      const body = await response.json() as any;
+      const body = (await response.json()) as any;
       expect(body.error).toContain("Invalid action");
     });
   });

@@ -1,14 +1,32 @@
+# Dependencies
+.bun/
+*/.bun/
 node_modules/
-.wrangler/
+
+# Build & Output
 dist/
+
+# Environment & Secrets
+.dev.vars
+.dev.vars*
+!.dev.vars.example
 .env
-.DS_Store
-# Ignore bun files
+.env.local
+.env*
+!.env.example
+.keys/
+
+# Cloudflare Wrangler
+.wrangler/
+wrangler.json
+wrangler.jsonc
+wrangler.toml
+!wrangler.jsonc.example
+
+# Package Manager
+*/bun.lockb
 bun.lock
 bun.lockb
-.bun/
 
-# Ignore bun files in all subdirectories
-*/bun.lockb
-*/.bun/
-.dev.vars
+# OS
+.DS_Store

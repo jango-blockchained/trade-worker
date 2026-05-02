@@ -157,7 +157,7 @@ export class DbLogger implements IDbLogger {
 
     try {
       const executionTime = startTime ? Date.now() - startTime : null;
-      let headersObject: Record<string, string> = {};
+      const headersObject: Record<string, string> = {};
       if (response.headers) {
         try {
           response.headers.forEach((value, key) => {

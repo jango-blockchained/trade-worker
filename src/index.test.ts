@@ -219,7 +219,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(response.status).toBe(500);
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
-      expect(responseBody.error).toContain("Failed to store signal");
+      expect(responseBody.error).toContain("Failed to store signal in database.");
       expect(mockRun).toHaveBeenCalledTimes(1);
     });
 
@@ -236,7 +236,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(response.status).toBe(500);
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
-      expect(responseBody.error).toContain("Internal server error");
+      expect(responseBody.error).toContain("Internal server error while storing signal.");
       expect(mockRun).toHaveBeenCalledTimes(1);
     });
   });
@@ -347,7 +347,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(response.status).toBe(500);
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
-      expect(responseBody.error).toContain("Internal server error");
+      expect(responseBody.error).toContain("Internal server error while retrieving signals.");
       expect(mockAll).toHaveBeenCalledTimes(1);
     });
   });

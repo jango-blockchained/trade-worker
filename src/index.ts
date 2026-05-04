@@ -14,6 +14,11 @@ import type {
 } from "@cloudflare/workers-types";
 import type { Ai } from "@cloudflare/ai";
 import type { ExecutionContext } from "@cloudflare/workers-types";
+import { createErrorResponse, Errors } from '@hoox/shared/errors';
+import { createLogger, withRequestLog } from '@hoox/shared/middleware';
+import { createRouter } from '@hoox/shared/router';
+import type { Handler } from '@hoox/shared/types/router';
+import type { WebhookPayload, StandardResponse } from '@hoox/shared/types';
 
 // --- Type Definitions ---
 
@@ -73,17 +78,6 @@ export interface IExchangeClient {
   closeShort: (symbol: string, quantity: number) => Promise<any>;
 }
 
-// Payload structure for incoming webhook requests
-export interface WebhookPayload {
-  exchange: string;
-  action: "LONG" | "SHORT" | "CLOSE_LONG" | "CLOSE_SHORT";
-  symbol: string;
-  quantity: number;
-  price?: number;
-  orderType?: string;
-  leverage?: number;
-}
-
 // Payload structure for legacy /process requests
 interface ProcessRequestBody {
   requestId?: string;
@@ -94,13 +88,6 @@ interface ProcessRequestBody {
 interface ValidationResult {
   isValid: boolean;
   error?: string;
-}
-
-// Standardized response structure
-interface StandardResponse {
-  success: boolean;
-  result?: unknown;
-  error?: string | null;
 }
 
 // Structure for storing trade signals in D1
@@ -194,77 +181,51 @@ async function logFailedTrade(
 
 // --- Worker Definition ---
 
-type QueueMessage = {
-  requestId: string;
-  exchange: string;
-  action: string;
-  symbol: string;
-  quantity: number;
-  price?: number;
-  leverage?: number;
-  queuedAt: string;
-};
+const logger = createLogger({ service: 'trade-worker', module: 'router' });
+
+const router = createRouter<Env>();
+
+// Define routes
+router.get('/health', async (request: Request, env: Env, ctx: ExecutionContext) => {
+  return new Response(
+    JSON.stringify({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+    }),
+    { headers: { "Content-Type": "application/json" } }
+  );
+});
+
+router.get(SIGNALS_ENDPOINT, async (request: Request, env: Env, ctx: ExecutionContext) => {
+  return await handleGetSignalsRequest(request, env);
+});
+
+router.post(SIGNALS_ENDPOINT, async (request: Request, env: Env, ctx: ExecutionContext) => {
+  return await handlePostSignalRequest(request, env);
+});
+
+router.post(WEBHOOK_ENDPOINT, async (request: Request, env: Env, ctx: ExecutionContext) => {
+  return await handleWebhookRequest(request, env, ctx);
+});
+
+router.post(PROCESS_ENDPOINT, async (request: Request, env: Env, ctx: ExecutionContext) => {
+  return await handleProcessRequest(request, env, ctx);
+});
+
+router.get('/report', async (request: Request, env: Env, ctx: ExecutionContext) => {
+  return await handleGetReportRequest(request, env);
+});
 
 export default {
-  async fetch(
-    request: Request,
-    env: Env,
-    ctx: ExecutionContext
-  ): Promise<Response> {
-    const url = new URL(request.url);
-
-    // Handle queue consumer invocations
-    if (request.method === "POST" && url.pathname === "/queue") {
-      return new Response(JSON.stringify({ queue: "consumer" }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // Call the shared KV logging function
-    // await logKvTimestamp(env); // Temporarily commented out due to test module resolution issues
-
-    // --- Add GET endpoint for retrieving R2 reports ---
-    if (request.method === "GET" && url.pathname === "/report") {
-      return await handleGetReportRequest(request, env);
-    } else if (url.pathname === SIGNALS_ENDPOINT) {
-      // Handle GET and POST for D1 signals
-      if (request.method === "GET") {
-        return await handleGetSignalsRequest(request, env);
-      } else if (request.method === "POST") {
-        return await handlePostSignalRequest(request, env);
-      }
-    }
-    // --- End R2 report endpoint ---
-
-    // --- Add worker health check endpoint ---
-    if (request.method === "GET" && url.pathname === "/health") {
-      return new Response(
-        JSON.stringify({
-          status: "ok",
-          timestamp: new Date().toISOString(),
-        }),
-        { headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    if (request.method === "POST" && url.pathname === WEBHOOK_ENDPOINT) {
-      return await handleWebhookRequest(request, env, ctx);
-    }
-
-    // --- Process Legacy Endpoint ---
-    if (request.method === "POST" && url.pathname === PROCESS_ENDPOINT) {
-      return await handleProcessRequest(request, env, ctx);
-    }
-
-    // --- Default: Return 404 ---
-    return new Response("Not Found", { status: 404 });
-  },
-
-  async queue(messages: QueueEvent<QueueMessage>[], env: Env): Promise<void> {
+  fetch: withRequestLog((request: Request, env: Env, ctx: ExecutionContext) => {
+    return router.handle(request, env, ctx);
+  }, { service: 'trade-worker', module: 'router' }),
+  
+  async queue(messages: QueueEvent<TradeQueueMessage>[], env: Env): Promise<void> {
     console.log(`[QueueHandler] Received ${messages.length} message(s)`);
 
     for (const msg of messages) {
-      const trade = (msg as unknown as { body: QueueMessage }).body;
+      const trade = (msg as unknown as { body: TradeQueueMessage }).body;
       console.log(
         `[QueueHandler] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`
       );

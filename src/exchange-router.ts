@@ -1,7 +1,8 @@
 import { MexcClient } from "./mexc-client";
 import { BinanceClient } from "./binance-client";
 import { BybitClient } from "./bybit-client";
-import type { Env, WebhookPayload, IExchangeClient } from "./index";
+import type { Env, IExchangeClient } from "./index";
+import type { WebhookPayload } from '@hoox/shared/types';
 
 export interface IExchangeProvider {
   name: string;

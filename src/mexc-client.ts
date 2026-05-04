@@ -55,6 +55,7 @@ export class MexcClient implements IMexcClient {
   private readonly apiKey: string;
   private readonly apiSecret: string;
   private readonly baseUrl: string = "https://contract.mexc.com"; // Use V1 futures API
+  private readonly importedKeyPromise: Promise<CryptoKey>;
 
   constructor(apiKey: string, apiSecret: string) {
     if (!apiKey || !apiSecret) {
@@ -62,6 +63,16 @@ export class MexcClient implements IMexcClient {
     }
     this.apiKey = apiKey;
     this.apiSecret = apiSecret;
+
+    // Pre-import the HMAC key to avoid expensive importKey on every request
+    const encoder = new TextEncoder();
+    this.importedKeyPromise = crypto.subtle.importKey(
+      "raw",
+      encoder.encode(apiSecret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
   }
 
   /**
@@ -86,21 +97,10 @@ export class MexcClient implements IMexcClient {
     const signaturePayload = `${queryString}&timestamp=${timestamp}`;
 
     const encoder = new TextEncoder();
-    const key = encoder.encode(this.apiSecret);
     const message = encoder.encode(signaturePayload);
 
-    const importedKey = await crypto.subtle.importKey(
-      "raw",
-      key,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const signatureBuffer = await crypto.subtle.sign(
-      "HMAC",
-      importedKey,
-      message
-    );
+    const importedKey = await this.importedKeyPromise;
+    const signatureBuffer = await crypto.subtle.sign("HMAC", importedKey, message);
 
     return Array.from(new Uint8Array(signatureBuffer))
       .map((b) => b.toString(16).padStart(2, "0"))

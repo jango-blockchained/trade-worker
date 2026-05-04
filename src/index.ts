@@ -277,30 +277,24 @@ export default {
 /**
  * Checks if API credentials seem configured for a given exchange.
  */
-export async function validateApiCredentials(
+export function validateApiCredentials(
   exchange: string,
   env: Env
-): Promise<boolean> {
-  const checkBinding = async (keyBinding?: string, secretBinding?: string) => {
-    try {
-      const key = keyBinding;
-      const secret = secretBinding;
-      return !!key && !!secret;
-    } catch {
-      return false;
-    }
+): boolean {
+  const checkBinding = (keyBinding?: string, secretBinding?: string): boolean => {
+    return !!keyBinding && !!secretBinding;
   };
 
   switch (exchange.toLowerCase()) {
     case "mexc":
-      return await checkBinding(env.MEXC_KEY_BINDING, env.MEXC_SECRET_BINDING);
+      return checkBinding(env.MEXC_KEY_BINDING, env.MEXC_SECRET_BINDING);
     case "binance":
-      return await checkBinding(
+      return checkBinding(
         env.BINANCE_KEY_BINDING,
         env.BINANCE_SECRET_BINDING
       );
     case "bybit":
-      return await checkBinding(
+      return checkBinding(
         env.BYBIT_KEY_BINDING,
         env.BYBIT_SECRET_BINDING
       );
@@ -568,14 +562,6 @@ async function executeTrade(
             JSON.stringify(result),
           ],
         };
-        await env.D1_SERVICE.fetch(
-          new Request("http://d1-service/query", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(tradePayload),
-          }) as any
-        );
-
         // Update or insert into positions table
         const side = action.includes("LONG") ? "LONG" : "SHORT";
         const posStatus = action.startsWith("CLOSE") ? "CLOSED" : "OPEN";
@@ -593,13 +579,24 @@ async function executeTrade(
             Math.floor(Date.now() / 1000),
           ],
         };
-        await env.D1_SERVICE.fetch(
-          new Request("http://d1-service/query", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(posPayload),
-          }) as any
-        );
+
+        // Execute both D1 writes concurrently (no dependency between them)
+        await Promise.all([
+          env.D1_SERVICE.fetch(
+            new Request("http://d1-service/query", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(tradePayload),
+            }) as any
+          ),
+          env.D1_SERVICE.fetch(
+            new Request("http://d1-service/query", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(posPayload),
+            }) as any
+          ),
+        ]);
       } catch (e) {
         console.error("Failed to update D1 trades and positions tables", e);
       }
@@ -1018,56 +1015,6 @@ async function handleGetReportRequest(
     return new Response(`Failed to retrieve report: ${errorMsg}`, {
       status: 500,
     });
-  }
-}
-
-/**
- * Temporary handler for testing basic Workers AI LLM calls.
- * Expects a 'prompt' query parameter.
- * REMOVE OR SECURE BEFORE PRODUCTION.
- */
-async function handleAiTest(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const prompt = url.searchParams.get("prompt");
-
-  if (!prompt) {
-    return createJsonResponse(
-      { success: false, error: "Missing 'prompt' query parameter" },
-      400
-    );
-  }
-
-  if (!env.AI) {
-    console.error("AI binding is not configured in the environment.");
-    return createJsonResponse(
-      { success: false, error: "AI service not available." },
-      500
-    );
-  }
-
-  try {
-    console.log(`Sending prompt to AI: "${prompt}"`);
-
-    // Basic call to the LLM
-    const response = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
-      messages: [
-        { role: "system", content: "You are a trading assistant." }, // Adjusted system prompt
-        { role: "user", content: prompt },
-      ],
-    });
-
-    console.log("Received AI response.");
-    return createJsonResponse({ success: true, result: response }, 200);
-  } catch (error: unknown) {
-    const errorMsg =
-      error instanceof Error
-        ? error.message
-        : String(error || "Unknown AI error");
-    console.error(`Error calling AI: ${errorMsg}`, error);
-    return createJsonResponse(
-      { success: false, error: `AI request failed: ${errorMsg}` },
-      500
-    );
   }
 }
 

@@ -354,7 +354,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
 });
 
 describe("Trade Worker Helpers", () => {
-  let validateApiCredentials: (exchange: string, env: any) => Promise<boolean>;
+  let validateApiCredentials: (exchange: string, env: any) => boolean;
   let validateTradePayload: (payload: any) => {
     isValid: boolean;
     error?: string;
@@ -387,31 +387,31 @@ describe("Trade Worker Helpers", () => {
 
   describe("validateApiCredentials", () => {
     it("should return true for mexc if keys are present", async () => {
-      expect(await validateApiCredentials("mexc", mockEnv)).toBe(true);
+      expect(validateApiCredentials("mexc", mockEnv)).toBe(true);
     });
     it("should return true for binance if keys are present", async () => {
-      expect(await validateApiCredentials("binance", mockEnv)).toBe(true);
+      expect(validateApiCredentials("binance", mockEnv)).toBe(true);
     });
     it("should return true for bybit if keys are present", async () => {
-      expect(await validateApiCredentials("bybit", mockEnv)).toBe(true);
+      expect(validateApiCredentials("bybit", mockEnv)).toBe(true);
     });
 
     it("should return false if key is missing for mexc", async () => {
       mockEnv.MEXC_KEY_BINDING = null;
-      expect(await validateApiCredentials("mexc", mockEnv)).toBe(false);
+      expect(validateApiCredentials("mexc", mockEnv)).toBe(false);
     });
     it("should return false if secret is missing for binance", async () => {
       mockEnv.BINANCE_SECRET_BINDING = null;
-      expect(await validateApiCredentials("binance", mockEnv)).toBe(false);
+      expect(validateApiCredentials("binance", mockEnv)).toBe(false);
     });
     it("should return false if key binding itself is missing for bybit", async () => {
       const envWithoutBinding = { ...mockEnv, BYBIT_KEY_BINDING: undefined };
-      expect(await validateApiCredentials("bybit", envWithoutBinding)).toBe(
+      expect(validateApiCredentials("bybit", envWithoutBinding)).toBe(
         false
       );
     });
     it("should return false for unknown exchange", async () => {
-      expect(await validateApiCredentials("kraken", mockEnv)).toBe(false);
+      expect(validateApiCredentials("kraken", mockEnv)).toBe(false);
     });
   });
 

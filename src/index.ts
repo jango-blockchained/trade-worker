@@ -54,6 +54,7 @@ export interface Env {
   D1_SERVICE?: Fetcher;
   REPORTS_BUCKET?: R2Bucket;
   TELEGRAM_SERVICE?: Fetcher;
+  ANALYTICS_SERVICE?: Fetcher;
 
   // Add other variables/bindings if needed
 }
@@ -103,6 +104,27 @@ interface TradeSignalRecord {
 // --- Constants ---
 const MAX_RETRIES = 5;
 const BACKOFF_DELAYS = [0, 30, 60, 300, 900]; // 0s, 30s, 1m, 5m, 15m
+
+// --- Analytics Tracking Helper ---
+async function trackAnalytics(
+  env: Env,
+  endpoint: string,
+  body: Record<string, any>
+): Promise<void> {
+  if (!env.ANALYTICS_SERVICE) return;
+  try {
+    await env.ANALYTICS_SERVICE.fetch(
+      new Request("http://analytics-service" + endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }) as any
+    );
+  } catch (e) {
+    // Analytics failures should not block main flow
+    console.error("Analytics tracking failed:", e);
+  }
+}
 const PROCESS_ENDPOINT = "/process"; // For legacy/direct calls with internal key
 const WEBHOOK_ENDPOINT = "/webhook"; // For calls from hoox via Service Binding
 const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
@@ -269,6 +291,16 @@ export default {
         }
       }
     }
+
+    // Track worker performance (non-blocking)
+    trackAnalytics(env, "/track/worker-perf", {
+      data: {
+        worker: "trade-worker",
+        requests: messages.length,
+        errors: 0, // Simplified - could count actual errors
+        duration: 0, // Could track actual duration if needed
+      },
+    });
   },
 };
 
@@ -609,6 +641,14 @@ async function executeTrade(
     });
     await dbLogger.logResponse(dbLogId, response, null, startTime);
 
+    // Track trade analytics (non-blocking)
+    const latencyMs = Date.now() - startTime;
+    trackAnalytics(env, "/track/trade", {
+      payload: { exchange: routedExchange, action, symbol, quantity, price },
+      result: { success: true },
+      latencyMs,
+    });
+
     // --- Send notification via telegram-worker after trade execution ---
     if (env.TELEGRAM_SERVICE) {
       try {
@@ -684,6 +724,21 @@ async function executeTrade(
         console.error("Failed to log error response to D1:", logErr);
       }
     }
+
+    // Track failed trade analytics (non-blocking)
+    const latencyMs = Date.now() - startTime;
+    trackAnalytics(env, "/track/trade", {
+      payload: {
+        exchange: payload.exchange,
+        action: payload.action,
+        symbol: payload.symbol,
+        quantity: payload.quantity,
+        price: payload.price,
+      },
+      result: { success: false, error: errorMsg },
+      latencyMs,
+    });
+
     return response;
   }
 }
@@ -787,6 +842,15 @@ async function handleWebhookRequest(
       }
     }
     // --- End Task 3.5 ---
+
+    // Track API call analytics (non-blocking)
+    const webhookLatencyMs = Date.now() - startTime;
+    trackAnalytics(env, "/track/api-call", {
+      worker: "trade-worker",
+      endpoint: "/webhook",
+      latencyMs: webhookLatencyMs,
+      success: tradeResponse.ok,
+    });
 
     return tradeResponse; // Return the original trade response
   } catch (error: any) {
@@ -929,6 +993,15 @@ async function handleProcessRequest(
       }
     }
     // --- End Task 3.5 ---
+
+    // Track API call analytics (non-blocking)
+    const processLatencyMs = Date.now() - startTime;
+    trackAnalytics(env, "/track/api-call", {
+      worker: "trade-worker",
+      endpoint: "/process",
+      latencyMs: processLatencyMs,
+      success: tradeResponse.ok,
+    });
 
     return tradeResponse; // Return the original trade response
   } catch (error: any) {

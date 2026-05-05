@@ -106,25 +106,25 @@ const MAX_RETRIES = 5;
 const BACKOFF_DELAYS = [0, 30, 60, 300, 900]; // 0s, 30s, 1m, 5m, 15m
 
 // --- Analytics Tracking Helper ---
-async function trackAnalytics(
-  env: Env,
-  endpoint: string,
-  body: Record<string, any>
-): Promise<void> {
-  if (!env.ANALYTICS_SERVICE) return;
-  try {
-    await env.ANALYTICS_SERVICE.fetch(
-      new Request("http://analytics-service" + endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }) as any
-    );
-  } catch (e) {
-    // Analytics failures should not block main flow
-    console.error("Analytics tracking failed:", e);
+  async trackAnalytics(
+    env: Env,
+    endpoint: string,
+    body: Record<string, any>
+  ): Promise<void> {
+    if (!env.ANALYTICS_SERVICE) return;
+    try {
+      await env.ANALYTICS_SERVICE.fetch(
+        new Request("http://localhost" + endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }) as any
+      );
+    } catch (e) {
+      // Analytics failures should not block main flow
+      console.error("Analytics tracking failed:", e);
+    }
   }
-}
 const PROCESS_ENDPOINT = "/process"; // For legacy/direct calls with internal key
 const WEBHOOK_ENDPOINT = "/webhook"; // For calls from hoox via Service Binding
 const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
@@ -189,7 +189,7 @@ async function logFailedTrade(
       };
 
       await env.D1_SERVICE.fetch(
-        new Request("http://d1-service/query", {
+        new Request("http://localhost/query", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(logPayload),
@@ -242,66 +242,6 @@ export default {
   fetch: withRequestLog((request: Request, env: Env, ctx: ExecutionContext) => {
     return router.handle(request, env, ctx);
   }, { service: 'trade-worker', module: 'router' }),
-  
-  async queue(messages: QueueEvent<TradeQueueMessage>[], env: Env): Promise<void> {
-    console.log(`[QueueHandler] Received ${messages.length} message(s)`);
-
-    for (const msg of messages) {
-      const trade = (msg as unknown as { body: TradeQueueMessage }).body;
-      console.log(
-        `[QueueHandler] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`
-      );
-
-      const retryCount = (msg as any).retry?.count || 0;
-
-      try {
-        const result = await executeTradeFromQueue(trade, env);
-
-        if (result.success) {
-          console.log(`[QueueHandler] Trade executed: ${trade.requestId}`);
-          await sendTradeNotification(trade, env, result);
-        } else {
-          throw new Error(result.error || "Trade execution failed");
-        }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(
-          `[QueueHandler] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`
-        );
-
-        if (retryCount < MAX_RETRIES) {
-          const delaySeconds =
-            BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
-          console.log(
-            `[QueueHandler] Scheduling retry for ${trade.requestId} in ${delaySeconds}s`
-          );
-
-          (msg as any).retry?.({
-            delaySeconds,
-          });
-        } else {
-          console.error(
-            `[QueueHandler] Max retries exceeded for ${trade.requestId}`
-          );
-          await logFailedTrade(trade, errorMsg, env);
-          await sendTradeNotification(trade, env, {
-            success: false,
-            error: errorMsg,
-          });
-        }
-      }
-    }
-
-    // Track worker performance (non-blocking)
-    trackAnalytics(env, "/track/worker-perf", {
-      data: {
-        worker: "trade-worker",
-        requests: messages.length,
-        errors: 0, // Simplified - could count actual errors
-        duration: 0, // Could track actual duration if needed
-      },
-    });
-  },
 };
 
 // --- Helper Functions ---
@@ -615,14 +555,14 @@ async function executeTrade(
         // Execute both D1 writes concurrently (no dependency between them)
         await Promise.all([
           env.D1_SERVICE.fetch(
-            new Request("http://d1-service/query", {
+            new Request("http://localhost/query", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(tradePayload),
             }) as any
           ),
           env.D1_SERVICE.fetch(
-            new Request("http://d1-service/query", {
+            new Request("http://localhost/query", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(posPayload),

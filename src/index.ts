@@ -242,6 +242,64 @@ export default {
   fetch: withRequestLog((request: Request, env: Env, ctx: ExecutionContext) => {
     return router.handle(request, env, ctx);
   }, { service: 'trade-worker', module: 'router' }),
+
+  async queue(messages: QueueEvent<TradeQueueMessage>[], env: Env, ctx: ExecutionContext): Promise<void> {
+    console.log(`[Queue] Received ${messages.length} message(s)`);
+
+    for (const msg of messages) {
+      const trade = (msg as unknown as { body: TradeQueueMessage }).body;
+      console.log(
+        `[Queue] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`
+      );
+
+      // Get retry count from message metadata
+      const retryCount = (msg as { retry?: { count: number } }).retry?.count || 0;
+
+      try {
+        // Execute the trade
+        const result = await executeTradeFromQueue(trade, env);
+
+        if (result.success) {
+          console.log(`[Queue] Trade executed successfully: ${trade.requestId}`);
+          // Send notification if configured
+          await sendTradeNotification(trade, env, result);
+        } else {
+          throw new Error(result.error || "Trade execution failed");
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[Queue] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`
+        );
+
+        if (retryCount < MAX_RETRIES) {
+          const delaySeconds =
+            BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
+          console.log(
+            `[Queue] Scheduling retry for ${trade.requestId} in ${delaySeconds}s (attempt ${retryCount + 2})`
+          );
+
+          // Re-queue with delay using the message's retry mechanism
+          (msg as any).retry?.({
+            delaySeconds,
+          });
+        } else {
+          console.error(
+            `[Queue] Max retries exceeded for ${trade.requestId}, moving to DLQ`
+          );
+
+          // Log failure to D1 for tracking
+          await logFailedTrade(trade, errorMsg, env);
+
+          // Send failure notification
+          await sendTradeNotification(trade, env, {
+            success: false,
+            error: errorMsg,
+          });
+        }
+      }
+    }
+  },
 };
 
 // --- Helper Functions ---
@@ -1275,7 +1333,7 @@ async function sendTradeNotification(
       : `❌ Trade Failed (Queue): ${trade.action} ${trade.symbol} - ${result.error}`;
 
     await env.TELEGRAM_SERVICE?.fetch(
-      new Request("http://telegram-service/process", {
+      new Request("http://localhost/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

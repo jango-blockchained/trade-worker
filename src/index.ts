@@ -15,6 +15,7 @@ import type {
 import type { Ai } from "@cloudflare/ai";
 import type { ExecutionContext } from "@cloudflare/workers-types";
 import { createErrorResponse, Errors } from '@hoox/shared/errors';
+import { createJsonResponse } from '@hoox/shared/json-response';
 import { createLogger, withRequestLog } from '@hoox/shared/middleware';
 import { createRouter } from '@hoox/shared/router';
 import type { Handler } from '@hoox/shared/types/router';
@@ -365,19 +366,6 @@ export function validateTradePayload(payload: any): ValidationResult {
   }
 
   return { isValid: true };
-}
-
-/**
- * Creates a standard JSON response.
- */
-function createJsonResponse(
-  body: StandardResponse,
-  status: number = 200
-): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
 }
 
 /**

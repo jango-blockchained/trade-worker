@@ -18,12 +18,14 @@ import { createErrorResponse, Errors } from '@hoox/shared/errors';
 import { createLogger, withRequestLog } from '@hoox/shared/middleware';
 import { createRouter } from '@hoox/shared/router';
 import type { Handler } from '@hoox/shared/types/router';
-import type { WebhookPayload, StandardResponse } from '@hoox/shared/types';
+import type { WebhookPayload, StandardResponse, ProcessRequestBody } from '@hoox/shared/types';
+import { trackAnalytics } from '@hoox/shared/analytics';
+import type { AnalyticsEnv } from '@hoox/shared/analytics';
 
 // --- Type Definitions ---
 
 // Define the expected environment variables and bindings from wrangler.toml
-export interface Env {
+export interface Env extends AnalyticsEnv {
   // Database
   DB?: D1Database;
 
@@ -54,7 +56,6 @@ export interface Env {
   D1_SERVICE?: Fetcher;
   REPORTS_BUCKET?: R2Bucket;
   TELEGRAM_SERVICE?: Fetcher;
-  ANALYTICS_SERVICE?: Fetcher;
 
   // Add other variables/bindings if needed
 }
@@ -80,11 +81,7 @@ export interface IExchangeClient {
 }
 
 // Payload structure for legacy /process requests
-interface ProcessRequestBody {
-  requestId?: string;
-  internalAuthKey?: string;
-  payload: WebhookPayload; // Nested payload
-}
+type TradeProcessRequestBody = ProcessRequestBody<WebhookPayload>;
 
 interface ValidationResult {
   isValid: boolean;
@@ -105,26 +102,6 @@ interface TradeSignalRecord {
 const MAX_RETRIES = 5;
 const BACKOFF_DELAYS = [0, 30, 60, 300, 900]; // 0s, 30s, 1m, 5m, 15m
 
-// --- Analytics Tracking Helper ---
-async function trackAnalytics(
-  env: Env,
-  endpoint: string,
-  body: Record<string, any>
-): Promise<void> {
-  if (!env.ANALYTICS_SERVICE) return;
-  try {
-    await env.ANALYTICS_SERVICE.fetch(
-      new Request("http://localhost" + endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }) as any
-    );
-  } catch (e) {
-    // Analytics failures should not block main flow
-    console.error("Analytics tracking failed:", e);
-  }
-}
 const PROCESS_ENDPOINT = "/process"; // For legacy/direct calls with internal key
 const WEBHOOK_ENDPOINT = "/webhook"; // For calls from hoox via Service Binding
 const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
@@ -897,7 +874,7 @@ async function handleProcessRequest(
   let incomingRequestId: string | undefined;
 
   try {
-    const data: ProcessRequestBody = await request.json();
+    const data: TradeProcessRequestBody = await request.json();
     incomingRequestId = data?.requestId;
     const internalAuthKey = data?.internalAuthKey;
 

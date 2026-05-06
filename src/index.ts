@@ -174,8 +174,8 @@ async function logFailedTrade(
         }) as any
       );
     }
-  } catch (e) {
-    console.error("Failed to log failed trade:", e);
+  } catch (error: unknown) {
+    console.error("Failed to log failed trade:", error);
   }
 }
 
@@ -472,8 +472,8 @@ async function executeTrade(
           maxPositionSize = parseFloat(maxSizeStr);
         }
       }
-    } catch (e) {
-      console.error("Failed to fetch risk management settings from KV:", e);
+    } catch (error: unknown) {
+      console.error("Failed to fetch risk management settings from KV:", error);
     }
 
     if (maxPositionSize !== null && quantity > maxPositionSize) {
@@ -497,8 +497,8 @@ async function executeTrade(
       const routeResult = await router.route(payload, env);
       client = routeResult.client;
       routedExchange = routeResult.exchange;
-    } catch (e: any) {
-      const errorMsg = e.message || `Failed to route exchange: ${exchange}`;
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : `Failed to route exchange: ${exchange}`;
       console.error(errorMsg);
       const response = createJsonResponse(
         { success: false, error: errorMsg },
@@ -592,8 +592,8 @@ async function executeTrade(
             }) as any
           ),
         ]);
-      } catch (e) {
-        console.error("Failed to update D1 trades and positions tables", e);
+      } catch (error: unknown) {
+        console.error("Failed to update D1 trades and positions tables", error);
       }
     }
 
@@ -1113,7 +1113,7 @@ async function handlePostSignalRequest(
   let signalPayload: any;
   try {
     signalPayload = await request.json();
-  } catch (e) {
+  } catch (error: unknown) {
     return createJsonResponse(
       { success: false, error: "Invalid JSON payload" },
       400
@@ -1304,9 +1304,9 @@ async function sendTradeNotification(
         body: JSON.stringify({
           message,
         }),
-      }) as any
+      }          ) as any
     );
-  } catch (e) {
-    console.error("[Queue] Failed to send notification:", e);
+  } catch (error: unknown) {
+    console.error("[Queue] Failed to send notification:", error);
   }
 }

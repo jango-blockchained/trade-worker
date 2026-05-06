@@ -133,7 +133,7 @@ export class DbLogger implements IDbLogger {
       );
 
       return logId;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error logging request via R2:", error);
       return null;
     }
@@ -204,7 +204,7 @@ export class DbLogger implements IDbLogger {
       );
 
       console.log(`Logged response for request ID: ${requestId}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error logging response via R2:", error);
     }
   }

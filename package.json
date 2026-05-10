@@ -16,7 +16,7 @@
   "dependencies": {
     "@binance/connector-typescript": "^0.3.16",
     "@cloudflare/puppeteer": "^1.1.0",
-    "@hoox/shared": "workspace:*",
+    "@jango-blockchained/hoox-shared": "workspace:*",
     "bybit-api": "^4.6.1",
     "typescript": "^5.9.3"
   },

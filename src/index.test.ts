@@ -7,11 +7,12 @@ import {
   beforeAll,
   jest as vi,
 } from "bun:test";
-import worker, {
+import worker from "./index"; // Import the worker
+import {
   validateApiCredentials,
   validateTradePayload,
-  saveReportToR2,
-} from "./index"; // Import the worker and helpers
+} from "./execution";
+import { saveReportToR2 } from "./reports";
 
 // --- Mock Exchange Clients ---
 const createMockClient = () => ({
@@ -219,7 +220,9 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(response.status).toBe(500);
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
-      expect(responseBody.error).toContain("Failed to store signal in database.");
+      expect(responseBody.error).toContain(
+        "Failed to store signal in database."
+      );
       expect(mockRun).toHaveBeenCalledTimes(1);
     });
 
@@ -236,7 +239,9 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(response.status).toBe(500);
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
-      expect(responseBody.error).toContain("Internal server error while storing signal.");
+      expect(responseBody.error).toContain(
+        "Internal server error while storing signal."
+      );
       expect(mockRun).toHaveBeenCalledTimes(1);
     });
   });
@@ -347,32 +352,15 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(response.status).toBe(500);
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
-      expect(responseBody.error).toContain("Internal server error while retrieving signals.");
+      expect(responseBody.error).toContain(
+        "Internal server error while retrieving signals."
+      );
       expect(mockAll).toHaveBeenCalledTimes(1);
     });
   });
 });
 
 describe("Trade Worker Helpers", () => {
-  let validateApiCredentials: (exchange: string, env: any) => boolean;
-  let validateTradePayload: (payload: any) => {
-    isValid: boolean;
-    error?: string;
-  };
-  let saveReportToR2: (
-    reportData: any,
-    payload: any,
-    dbLogId: string | null,
-    env: any
-  ) => Promise<void>;
-
-  beforeAll(async () => {
-    // Import the helper functions using dynamic import
-    const module = await import("./index");
-    validateApiCredentials = module.validateApiCredentials;
-    validateTradePayload = module.validateTradePayload;
-    saveReportToR2 = module.saveReportToR2;
-  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -406,9 +394,7 @@ describe("Trade Worker Helpers", () => {
     });
     it("should return false if key binding itself is missing for bybit", async () => {
       const envWithoutBinding = { ...mockEnv, BYBIT_KEY_BINDING: undefined };
-      expect(validateApiCredentials("bybit", envWithoutBinding)).toBe(
-        false
-      );
+      expect(validateApiCredentials("bybit", envWithoutBinding)).toBe(false);
     });
     it("should return false for unknown exchange", async () => {
       expect(validateApiCredentials("kraken", mockEnv)).toBe(false);

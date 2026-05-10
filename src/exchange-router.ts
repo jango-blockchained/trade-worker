@@ -2,7 +2,8 @@ import { MexcClient } from "./mexc-client";
 import { BinanceClient } from "./binance-client";
 import { BybitClient } from "./bybit-client";
 import type { Env, IExchangeClient } from "./index";
-import type { WebhookPayload } from '@hoox/shared/types';
+import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
+import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 
 export interface IExchangeProvider {
   name: string;
@@ -76,7 +77,9 @@ export class ExchangeRouter {
     // Check KV for dynamic routing
     if (env.CONFIG_KV) {
       try {
-        const routingTableStr = await env.CONFIG_KV.get("trade:routing");
+        const routingTableStr = await env.CONFIG_KV.get(
+          KVKeys.KV_TRADE_ROUTING
+        );
         if (routingTableStr) {
           const routingTable = JSON.parse(routingTableStr);
           if (routingTable[payload.symbol]) {

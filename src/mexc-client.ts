@@ -100,7 +100,11 @@ export class MexcClient implements IMexcClient {
     const message = encoder.encode(signaturePayload);
 
     const importedKey = await this.importedKeyPromise;
-    const signatureBuffer = await crypto.subtle.sign("HMAC", importedKey, message);
+    const signatureBuffer = await crypto.subtle.sign(
+      "HMAC",
+      importedKey,
+      message
+    );
 
     return Array.from(new Uint8Array(signatureBuffer))
       .map((b) => b.toString(16).padStart(2, "0"))

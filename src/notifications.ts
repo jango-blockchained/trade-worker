@@ -1,4 +1,5 @@
 import type { Fetcher } from "@cloudflare/workers-types";
+import { toError } from "@jango-blockchained/hoox-shared/errors";
 
 // --- Type Definitions ---
 
@@ -56,7 +57,7 @@ export async function sendTradeNotificationToTelegram(
 
     console.log(`[${dbLogId}] Calling TELEGRAM_SERVICE for notification...`);
     const notificationResponse = await env.TELEGRAM_SERVICE.fetch(
-      telegramWorkerRequest as any
+      telegramWorkerRequest as unknown as Request
     );
 
     if (!notificationResponse.ok) {
@@ -67,10 +68,7 @@ export async function sendTradeNotificationToTelegram(
       console.log(`[${dbLogId}] Notification sent via TELEGRAM_SERVICE.`);
     }
   } catch (notificationError: unknown) {
-    const errorMsg =
-      notificationError instanceof Error
-        ? notificationError.message
-        : String(notificationError || "Unknown notification error");
+    const errorMsg = toError(notificationError, "Unknown notification error");
     console.error(
       `[${dbLogId}] Exception calling TELEGRAM_SERVICE for notification:`,
       errorMsg

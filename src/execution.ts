@@ -3,7 +3,10 @@
 
 import type { KVNamespace } from "@cloudflare/workers-types";
 import type { Fetcher } from "@cloudflare/workers-types";
-import { createJsonResponse } from "@jango-blockchained/hoox-shared/errors";
+import {
+  createJsonResponse,
+  toError,
+} from "@jango-blockchained/hoox-shared/errors";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
 import {
   trackAnalytics,
@@ -123,14 +126,14 @@ export async function updateD1TradeRecords(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(tradePayload),
-        }) as any
+        }) as unknown as Request
       ),
       env.D1_SERVICE.fetch(
         new Request("http://localhost/query", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(posPayload),
-        }) as any
+        }) as unknown as Request
       ),
     ]);
   } catch (error: unknown) {
@@ -224,6 +227,17 @@ export function validateTradePayload(payload: any): ValidationResult {
 // --- Core Trade Execution Logic ---
 
 /**
+ * Structured result from trade execution, avoiding raw Response passing.
+ */
+export interface TradeExecutionResult {
+  success: boolean;
+  result?: unknown;
+  error?: string | null;
+  /** HTTP status code appropriate for this result (e.g. 200, 400, 500) */
+  status?: number;
+}
+
+/**
  * Core logic to process a validated trade payload.
  */
 export async function executeTrade(
@@ -232,7 +246,7 @@ export async function executeTrade(
   dbLogger: IDbLogger,
   startTime: number,
   dbLogId: string | null // Changed to string
-): Promise<Response> {
+): Promise<TradeExecutionResult> {
   try {
     const {
       exchange,
@@ -273,12 +287,18 @@ export async function executeTrade(
     if (maxPositionSize !== null && quantity > maxPositionSize) {
       const errorMsg = `Trade quantity (${quantity}) exceeds maximum allowed size (${maxPositionSize})`;
       console.error(errorMsg);
-      const response = createJsonResponse(
-        { success: false, error: errorMsg },
-        400
+      const result: TradeExecutionResult = {
+        success: false,
+        error: errorMsg,
+        status: 400,
+      };
+      await dbLogger.logResponse(
+        dbLogId,
+        createJsonResponse(result, 400),
+        null,
+        startTime
       );
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
-      return response;
+      return result;
     }
     // --- End Risk Management ---
 
@@ -292,17 +312,20 @@ export async function executeTrade(
       client = routeResult.client;
       routedExchange = routeResult.exchange;
     } catch (error: unknown) {
-      const errorMsg =
-        error instanceof Error
-          ? error.message
-          : `Failed to route exchange: ${exchange}`;
+      const errorMsg = toError(error, `Failed to route exchange: ${exchange}`);
       console.error(errorMsg);
-      const response = createJsonResponse(
-        { success: false, error: errorMsg },
-        400
+      const result: TradeExecutionResult = {
+        success: false,
+        error: errorMsg,
+        status: 400,
+      };
+      await dbLogger.logResponse(
+        dbLogId,
+        createJsonResponse(result, 400),
+        null,
+        startTime
       );
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
-      return response;
+      return result;
     }
 
     if (client.setLeverage && overriddenLeverage) {
@@ -344,12 +367,18 @@ export async function executeTrade(
       );
     }
 
-    const response = createJsonResponse({
+    const tradeResult: TradeExecutionResult = {
       success: true,
-      result: result,
+      result,
       error: null,
-    });
-    await dbLogger.logResponse(dbLogId, response, null, startTime);
+      status: 200,
+    };
+    await dbLogger.logResponse(
+      dbLogId,
+      createJsonResponse(tradeResult),
+      null,
+      startTime
+    );
 
     // Track trade analytics (non-blocking)
     const latencyMs = Date.now() - startTime;
@@ -372,17 +401,16 @@ export async function executeTrade(
       );
     }
 
-    return response;
+    return tradeResult;
   } catch (error: unknown) {
-    const errorMsg =
-      error instanceof Error
-        ? error.message
-        : String(error || "Internal server error");
+    const errorMsg = toError(error, "Internal server error");
     console.error("Error in executeTrade:", errorMsg, error);
-    const response = createJsonResponse(
-      { success: false, error: `Trade execution failed: ${errorMsg}` },
-      500
-    );
+    const tradeResult: TradeExecutionResult = {
+      success: false,
+      error: `Trade execution failed: ${errorMsg}`,
+      status: 500,
+    };
+    const response = createJsonResponse(tradeResult, 500);
     // Log failure response, even if dbLogId might be null in edge cases
     if (dbLogger && dbLogId !== null) {
       try {
@@ -406,6 +434,6 @@ export async function executeTrade(
       latencyMs,
     });
 
-    return response;
+    return tradeResult;
   }
 }

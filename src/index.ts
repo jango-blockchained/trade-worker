@@ -17,6 +17,7 @@ import {
   createErrorResponse,
   Errors,
   createJsonResponse,
+  toError,
 } from "@jango-blockchained/hoox-shared/errors";
 import {
   createLogger,
@@ -37,6 +38,7 @@ import {
   validateApiCredentials,
   updateD1TradeRecords,
   type ExecutionEnv,
+  type TradeExecutionResult,
 } from "./execution";
 import {
   insertSignal,
@@ -116,29 +118,23 @@ async function executeTradeFromQueue(
       leverage: trade.leverage,
     };
 
-    const dbLogger = new DbLogger(env as any);
+    const dbLogger = new DbLogger(env as unknown as ExecutionEnv);
     const startTime = Date.now();
-    const response = await executeTrade(
+    const tradeResult = await executeTrade(
       payload,
       env,
       dbLogger,
       startTime,
       null
     );
-    const result = (await response.json()) as {
-      success?: boolean;
-      result?: unknown;
-      error?: string;
-    };
 
     return {
-      success: result.success ?? false,
-      result: result.result,
-      error: result.error,
+      success: tradeResult.success ?? false,
+      result: tradeResult.result,
+      error: tradeResult.error,
     };
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    return { success: false, error: errorMsg };
+  } catch (error: unknown) {
+    return { success: false, error: toError(error) };
   }
 }
 
@@ -164,7 +160,7 @@ async function logFailedTrade(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(logPayload),
-        }) as any
+        }) as unknown as Request
       );
     }
   } catch (error: unknown) {
@@ -181,31 +177,21 @@ const logger = createLogger({ service: "trade-worker", module: "router" });
  * Extracted to avoid duplicating this pattern across webhook + process handlers.
  */
 async function queueReportSave(
-  tradeResponse: Response,
+  tradeResult: TradeExecutionResult,
   payload: WebhookPayload,
   dbLogId: string | null,
   env: Env,
   ctx: ExecutionContext,
   requestId: string | undefined
 ): Promise<void> {
-  if (tradeResponse.ok) {
+  if (tradeResult.success) {
     try {
-      const tradeResult = (await tradeResponse.clone().json()) as any;
-      if (tradeResult.success) {
-        console.log(
-          `[${requestId}] Trade successful, queueing report save to R2.`
-        );
-        ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
-      } else {
-        console.log(
-          `[${requestId}] Trade execution reported failure, skipping R2 report save.`
-        );
-      }
-    } catch (e) {
-      console.error(
-        `[${requestId}] Failed to parse trade response for R2 reporting:`,
-        e
+      console.log(
+        `[${requestId}] Trade successful, queueing report save to R2.`
       );
+      ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
+    } catch (e) {
+      console.error(`[${requestId}] Failed to queue R2 report save:`, e);
     }
   }
 }
@@ -293,8 +279,8 @@ export default {
         } else {
           throw new Error(result.error || "Trade execution failed");
         }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
+      } catch (error: unknown) {
+        const errorMsg = toError(error);
         console.error(
           `[Queue] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`
         );
@@ -307,7 +293,11 @@ export default {
           );
 
           // Re-queue with delay using the message's retry mechanism
-          (msg as any).retry?.({
+          (
+            msg as unknown as {
+              retry?: (opts: { delaySeconds: number }) => void;
+            }
+          ).retry?.({
             delaySeconds,
           });
         } else {
@@ -342,7 +332,7 @@ async function handleWebhookRequest(
   const startTime = Date.now();
   // Use mock or real DbLogger
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
-  const dbLogger = new DbLoggerClass(env as any);
+  const dbLogger = new DbLoggerClass(env as unknown as ExecutionEnv);
   let dbLogId: string | null = null;
   const incomingRequestId =
     request.headers.get("X-Request-ID") || crypto.randomUUID();
@@ -395,16 +385,27 @@ async function handleWebhookRequest(
     }
 
     // *** Call executeTrade ***
-    const tradeResponse = await executeTrade(
+    const tradeResult = await executeTrade(
       payload,
       env,
       dbLogger,
       startTime,
       dbLogId
     );
+    const tradeResponse = createJsonResponse(
+      tradeResult,
+      tradeResult.status ?? (tradeResult.success ? 200 : 500)
+    );
 
     // Queue R2 report save (if trade was successful)
-    await queueReportSave(tradeResponse, payload, dbLogId, env, ctx, incomingRequestId);
+    await queueReportSave(
+      tradeResult,
+      payload,
+      dbLogId,
+      env,
+      ctx,
+      incomingRequestId
+    );
 
     // Track API call analytics (non-blocking)
     const webhookLatencyMs = Date.now() - startTime;
@@ -412,19 +413,20 @@ async function handleWebhookRequest(
       worker: "trade-worker",
       endpoint: "/webhook",
       latencyMs: webhookLatencyMs,
-      success: tradeResponse.ok,
+      success: tradeResult.success,
     });
 
-    return tradeResponse; // Return the original trade response
-  } catch (error: any) {
+    return tradeResponse;
+  } catch (error: unknown) {
+    const errorMsg = toError(error, "Failed to process webhook request");
     console.error(
       `Error in handleWebhookRequest for ID ${incomingRequestId}:`,
-      error
+      errorMsg
     );
     const response = createJsonResponse(
       {
         success: false,
-        error: error.message || "Failed to process webhook request",
+        error: errorMsg,
       },
       500
     );
@@ -457,7 +459,7 @@ async function handleProcessRequest(
 ): Promise<Response> {
   const startTime = Date.now();
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
-  const dbLogger = new DbLoggerClass(env as any);
+  const dbLogger = new DbLoggerClass(env as unknown as ExecutionEnv);
   let dbLogId: string | null = null;
   let incomingRequestId: string | undefined;
 
@@ -523,16 +525,27 @@ async function handleProcessRequest(
     }
 
     // *** Call executeTrade ***
-    const tradeResponse = await executeTrade(
+    const tradeResult = await executeTrade(
       payload,
       env,
       dbLogger,
       startTime,
       dbLogId
     );
+    const tradeResponse = createJsonResponse(
+      tradeResult,
+      tradeResult.status ?? (tradeResult.success ? 200 : 500)
+    );
 
     // Queue R2 report save (if trade was successful)
-    await queueReportSave(tradeResponse, payload, dbLogId, env, ctx, incomingRequestId);
+    await queueReportSave(
+      tradeResult,
+      payload,
+      dbLogId,
+      env,
+      ctx,
+      incomingRequestId
+    );
 
     // Track API call analytics (non-blocking)
     const processLatencyMs = Date.now() - startTime;
@@ -540,19 +553,20 @@ async function handleProcessRequest(
       worker: "trade-worker",
       endpoint: "/process",
       latencyMs: processLatencyMs,
-      success: tradeResponse.ok,
+      success: tradeResult.success,
     });
 
-    return tradeResponse; // Return the original trade response
-  } catch (error: any) {
+    return tradeResponse;
+  } catch (error: unknown) {
+    const errorMsg = toError(error, "Failed to process request");
     console.error(
       `Error in handleProcessRequest for ID ${incomingRequestId}:`,
-      error
+      errorMsg
     );
     const response = createJsonResponse(
       {
         success: false,
-        error: error.message || "Failed to process request",
+        error: errorMsg,
       },
       500
     );

@@ -8,10 +8,7 @@ import {
   jest as vi,
 } from "bun:test";
 import worker from "./index"; // Import the worker
-import {
-  validateApiCredentials,
-  validateTradePayload,
-} from "./execution";
+import { validateApiCredentials, validateTradePayload } from "./execution";
 import { saveReportToR2 } from "./reports";
 
 // --- Mock Exchange Clients ---
@@ -361,7 +358,6 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
 });
 
 describe("Trade Worker Helpers", () => {
-
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset secret bindings for credential tests
@@ -756,15 +752,9 @@ describe("Trade Worker Handlers", () => {
     });
   });
 
-  describe.skip("/process handler", () => {
-    const processPayload = {
-      requestId: "req-abc",
-      internalAuthKey: "test-internal-key",
-      payload: validPayload,
-    };
-
+  describe("/process handler (legacy flow)", () => {
     it("should authenticate, validate, and execute trade", async () => {
-      const request = createMockRequest("POST", "/process", processPayload);
+      const request = createMockRequest("POST", "/process", validPayload);
       await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
 
       // Check trade was executed
@@ -775,9 +765,14 @@ describe("Trade Worker Handlers", () => {
       expect(mockLogResponse).toHaveBeenCalled();
     });
 
-    it("should return 403 if internalAuthKey is missing or incorrect", async () => {
-      const badAuthPayload = { ...processPayload, internalAuthKey: "wrong" };
-      const request = createMockRequest("POST", "/process", badAuthPayload);
+    it("should return 403 if X-Internal-Auth-Key is missing", async () => {
+      const request = createMockRequest(
+        "POST",
+        "/process",
+        validPayload,
+        {},
+        false
+      );
       const response = await worker.fetch(request, mockEnv, {
         waitUntil: vi.fn(),
       } as any);
@@ -788,7 +783,7 @@ describe("Trade Worker Handlers", () => {
 
     it("should return 500 if INTERNAL_KEY_BINDING is missing", async () => {
       const envNoKey = { ...mockEnv, INTERNAL_KEY_BINDING: undefined };
-      const request = createMockRequest("POST", "/process", processPayload);
+      const request = createMockRequest("POST", "/process", validPayload);
       const response = await worker.fetch(request, envNoKey, {
         waitUntil: vi.fn(),
       } as any);
@@ -798,15 +793,10 @@ describe("Trade Worker Handlers", () => {
     });
 
     it("should return 400 if nested payload is invalid", async () => {
-      const invalidNestedPayload = {
-        ...processPayload,
-        payload: { ...validPayload, action: "INVALID" },
-      };
-      const request = createMockRequest(
-        "POST",
-        "/process",
-        invalidNestedPayload
-      );
+      const request = createMockRequest("POST", "/process", {
+        ...validPayload,
+        action: "INVALID",
+      });
       const response = await worker.fetch(request, mockEnv, {
         waitUntil: vi.fn(),
       } as any);

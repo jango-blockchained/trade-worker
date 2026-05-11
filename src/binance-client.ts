@@ -1,5 +1,7 @@
 // workers/trade-worker/src/binance-client.ts
 
+import { bufferToHex } from "./shared/exchange-client";
+
 // Define interfaces for Binance API responses (adjust based on actual API)
 interface BinanceErrorResponse {
   code: number;
@@ -82,9 +84,7 @@ export class BinanceClient implements IBinanceClient {
       message
     );
 
-    return Array.from(new Uint8Array(signatureBuffer))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    return bufferToHex(signatureBuffer);
   }
 
   /**

@@ -116,7 +116,7 @@ describe("MexcClient (V1 Futures)", () => {
     // Verify the payload bytes passed to sign
     expect(mockSign.mock.calls.length).toBeGreaterThan(0);
     const signCallArgs = mockSign.mock.calls[0];
-    // @ts-ignore - Ignore complex mock args type
+    // @ts-expect-error - Ignore complex mock args type
     const payloadBuffer = signCallArgs[2] as ArrayBuffer;
     const decodedPayload = new TextDecoder().decode(payloadBuffer);
     expect(decodedPayload).toBe(expectedPayload);
@@ -151,7 +151,7 @@ describe("MexcClient (V1 Futures)", () => {
     // Check signature payload was correct
     expect(mockSign.mock.calls.length).toBeGreaterThan(0);
     const signCallArgs = mockSign.mock.calls[0];
-    // @ts-ignore
+    // @ts-expect-error
     const payloadBuffer = signCallArgs[2] as ArrayBuffer;
     const decodedPayload = new TextDecoder().decode(payloadBuffer);
     expect(decodedPayload).toBe(expectedSigPayload);
@@ -212,7 +212,7 @@ describe("MexcClient (V1 Futures)", () => {
     // Verify signature payload
     expect(mockSign.mock.calls.length).toBeGreaterThan(0);
     const signCallArgs = mockSign.mock.calls[0];
-    // @ts-ignore
+    // @ts-expect-error
     const payloadBuffer = signCallArgs[2] as ArrayBuffer;
     const decodedPayload = new TextDecoder().decode(payloadBuffer);
     expect(decodedPayload).toBe(expectedSigPayload);

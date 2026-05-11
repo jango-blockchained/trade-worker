@@ -12,7 +12,7 @@ import { BinanceClient } from "../src/binance-client.js";
 
 // --- Mocks ---
 const mockFetch = mock(global.fetch);
-// @ts-ignore - Ignore type mismatch for mock assignment
+// @ts-expect-error - Ignore type mismatch for mock assignment
 global.fetch = mockFetch as any;
 
 const mockImportKey: Mock<typeof crypto.subtle.importKey> = mock(() =>

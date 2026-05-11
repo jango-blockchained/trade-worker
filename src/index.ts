@@ -1,8 +1,7 @@
-import { MexcClient, type IMexcClient } from "./mexc-client";
-import { BinanceClient, type IBinanceClient } from "./binance-client";
-import { BybitClient, type IBybitClient } from "./bybit-client";
-import { DbLogger, type IDbLogger } from "./db-logger";
-import { ExchangeRouter } from "./exchange-router";
+import { MexcClient } from "./mexc-client";
+import { BinanceClient } from "./binance-client";
+import { BybitClient } from "./bybit-client";
+import { DbLogger } from "./db-logger";
 import type { KVNamespace } from "@cloudflare/workers-types";
 import type { R2Bucket } from "@cloudflare/workers-types";
 import type { D1Database } from "@cloudflare/workers-types";
@@ -24,10 +23,8 @@ import {
   withRequestLog,
 } from "@jango-blockchained/hoox-shared/middleware";
 import { createRouter } from "@jango-blockchained/hoox-shared/router";
-import type { Handler } from "@jango-blockchained/hoox-shared/types/router";
 import {
   WebhookPayload,
-  StandardResponse,
   ProcessRequestBody,
 } from "@jango-blockchained/hoox-shared/types";
 import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
@@ -51,7 +48,6 @@ import { saveReportToR2, handleGetReportRequest } from "./reports";
 import {
   sendTradeNotification,
   sendTradeNotificationToTelegram,
-  type NotificationsEnv,
   TradeQueueMessage,
 } from "./notifications";
 
@@ -179,6 +175,40 @@ async function logFailedTrade(
 // --- Worker Definition ---
 
 const logger = createLogger({ service: "trade-worker", module: "router" });
+
+/**
+ * Helper: queue R2 report save on successful trade execution.
+ * Extracted to avoid duplicating this pattern across webhook + process handlers.
+ */
+async function queueReportSave(
+  tradeResponse: Response,
+  payload: WebhookPayload,
+  dbLogId: string | null,
+  env: Env,
+  ctx: ExecutionContext,
+  requestId: string | undefined
+): Promise<void> {
+  if (tradeResponse.ok) {
+    try {
+      const tradeResult = (await tradeResponse.clone().json()) as any;
+      if (tradeResult.success) {
+        console.log(
+          `[${requestId}] Trade successful, queueing report save to R2.`
+        );
+        ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
+      } else {
+        console.log(
+          `[${requestId}] Trade execution reported failure, skipping R2 report save.`
+        );
+      }
+    } catch (e) {
+      console.error(
+        `[${requestId}] Failed to parse trade response for R2 reporting:`,
+        e
+      );
+    }
+  }
+}
 
 const router = createRouter<Env>();
 
@@ -373,31 +403,8 @@ async function handleWebhookRequest(
       dbLogId
     );
 
-    // --- Task 3.5: Save Report on Success ---
-    if (tradeResponse.ok) {
-      // Check if trade execution itself was successful
-      try {
-        const tradeResult = (await tradeResponse.clone().json()) as any; // Need the result for the report
-        if (tradeResult.success) {
-          console.log(
-            `[${incomingRequestId}] Trade successful, queueing report save to R2.`
-          );
-          ctx.waitUntil(
-            saveReportToR2(tradeResult.result, payload, dbLogId, env)
-          );
-        } else {
-          console.log(
-            `[${incomingRequestId}] Trade execution reported failure, skipping R2 report save.`
-          );
-        }
-      } catch (e) {
-        console.error(
-          `[${incomingRequestId}] Failed to parse trade response for R2 reporting:`,
-          e
-        );
-      }
-    }
-    // --- End Task 3.5 ---
+    // Queue R2 report save (if trade was successful)
+    await queueReportSave(tradeResponse, payload, dbLogId, env, ctx, incomingRequestId);
 
     // Track API call analytics (non-blocking)
     const webhookLatencyMs = Date.now() - startTime;
@@ -524,31 +531,8 @@ async function handleProcessRequest(
       dbLogId
     );
 
-    // --- Task 3.5: Save Report on Success ---
-    if (tradeResponse.ok) {
-      // Check if trade execution itself was successful
-      try {
-        const tradeResult = (await tradeResponse.clone().json()) as any; // Need the result for the report
-        if (tradeResult.success) {
-          console.log(
-            `[${incomingRequestId}] Trade successful, queueing report save to R2.`
-          );
-          ctx.waitUntil(
-            saveReportToR2(tradeResult.result, payload, dbLogId, env)
-          );
-        } else {
-          console.log(
-            `[${incomingRequestId}] Trade execution reported failure, skipping R2 report save.`
-          );
-        }
-      } catch (e) {
-        console.error(
-          `[${incomingRequestId}] Failed to parse trade response for R2 reporting:`,
-          e
-        );
-      }
-    }
-    // --- End Task 3.5 ---
+    // Queue R2 report save (if trade was successful)
+    await queueReportSave(tradeResponse, payload, dbLogId, env, ctx, incomingRequestId);
 
     // Track API call analytics (non-blocking)
     const processLatencyMs = Date.now() - startTime;

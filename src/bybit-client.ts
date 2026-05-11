@@ -1,5 +1,7 @@
 // workers/trade-worker/src/bybit-client.ts
 
+import { bufferToHex } from "./shared/exchange-client";
+
 // Define interfaces for Bybit V5 API responses
 interface BybitBaseResponse {
   retCode: number;
@@ -92,9 +94,7 @@ export class BybitClient implements IBybitClient {
       message
     );
 
-    return Array.from(new Uint8Array(signatureBuffer))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    return bufferToHex(signatureBuffer);
   }
 
   /**

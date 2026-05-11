@@ -33,6 +33,41 @@ export interface Position {
   unrealizedPnl?: number;
 }
 
+/**
+ * Convert an ArrayBuffer to a hex string.
+ * Used by all exchange clients for HMAC-SHA256 signature generation.
+ * Extracted to eliminate the same 3-line pattern in 3 client files.
+ */
+export function bufferToHex(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Sign data with HMAC-SHA256 using the Web Crypto API.
+ * Shared utility to eliminate duplicated crypto.subtle patterns across exchange clients.
+ */
+export async function hmacSign(
+  secret: string,
+  data: string
+): Promise<string> {
+  const encoder = new TextEncoder();
+  const importedKey = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signatureBuffer = await crypto.subtle.sign(
+    "HMAC",
+    importedKey,
+    encoder.encode(data)
+  );
+  return bufferToHex(signatureBuffer);
+}
+
 export abstract class BaseExchangeClient {
   protected readonly apiKey: string;
   protected readonly apiSecret: string;

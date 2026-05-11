@@ -134,7 +134,7 @@ describe("BybitClient (V5)", () => {
     // Verify the payload bytes passed to sign
     expect(mockSign.mock.calls.length).toBeGreaterThan(0); // Ensure call happened
     const signCallArgs = mockSign.mock.calls[0]; // Get arguments of the first call
-    // @ts-ignore - Bun mock args structure can be complex, ignore type for simplicity here
+    // @ts-expect-error - Bun mock args structure can be complex, ignore type for simplicity here
     const payloadBuffer = signCallArgs[2] as ArrayBuffer;
     const decodedPayload = new TextDecoder().decode(payloadBuffer);
     expect(decodedPayload).toBe(expectedPayload);
@@ -168,7 +168,7 @@ describe("BybitClient (V5)", () => {
     // Check signature payload was correct
     expect(mockSign.mock.calls.length).toBeGreaterThan(0);
     const signCallArgs = mockSign.mock.calls[0];
-    // @ts-ignore
+    // @ts-expect-error
     const payloadBuffer = signCallArgs[2] as ArrayBuffer;
     const decodedPayload = new TextDecoder().decode(payloadBuffer);
     expect(decodedPayload).toBe(expectedSigPayload);
@@ -223,7 +223,7 @@ describe("BybitClient (V5)", () => {
     // Check signature payload was correct
     expect(mockSign.mock.calls.length).toBeGreaterThan(0);
     const signCallArgs = mockSign.mock.calls[0];
-    // @ts-ignore
+    // @ts-expect-error
     const payloadBuffer = signCallArgs[2] as ArrayBuffer;
     const decodedPayload = new TextDecoder().decode(payloadBuffer);
     expect(decodedPayload).toBe(expectedSigPayload);

@@ -1,5 +1,7 @@
 // workers/trade-worker/src/mexc-client.ts
 
+import { bufferToHex } from "./shared/exchange-client";
+
 // Define interfaces for MEXC API responses (adjust based on actual API)
 interface MexcSuccessResponse<T> {
   code: number; // Typically 200 for success
@@ -106,9 +108,7 @@ export class MexcClient implements IMexcClient {
       message
     );
 
-    return Array.from(new Uint8Array(signatureBuffer))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    return bufferToHex(signatureBuffer);
   }
 
   /**

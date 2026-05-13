@@ -48,10 +48,7 @@ export function bufferToHex(buffer: ArrayBuffer): string {
  * Sign data with HMAC-SHA256 using the Web Crypto API.
  * Shared utility to eliminate duplicated crypto.subtle patterns across exchange clients.
  */
-export async function hmacSign(
-  secret: string,
-  data: string
-): Promise<string> {
+export async function hmacSign(secret: string, data: string): Promise<string> {
   const encoder = new TextEncoder();
   const importedKey = await crypto.subtle.importKey(
     "raw",

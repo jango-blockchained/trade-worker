@@ -20,9 +20,8 @@ describe("sendTradeNotificationToTelegram", () => {
   };
 
   test("returns early when TELEGRAM_SERVICE is not configured", async () => {
-    const { sendTradeNotificationToTelegram } = await import(
-      "../src/notifications"
-    );
+    const { sendTradeNotificationToTelegram } =
+      await import("../src/notifications");
     await sendTradeNotificationToTelegram(
       {},
       successResult,
@@ -36,9 +35,8 @@ describe("sendTradeNotificationToTelegram", () => {
   });
 
   test("sends successful trade notification to Telegram", async () => {
-    const { sendTradeNotificationToTelegram } = await import(
-      "../src/notifications"
-    );
+    const { sendTradeNotificationToTelegram } =
+      await import("../src/notifications");
     mockFetch.mockResolvedValue(new Response(null, { status: 200 }));
 
     await sendTradeNotificationToTelegram(
@@ -65,9 +63,8 @@ describe("sendTradeNotificationToTelegram", () => {
   });
 
   test("sends failure trade notification to Telegram", async () => {
-    const { sendTradeNotificationToTelegram } = await import(
-      "../src/notifications"
-    );
+    const { sendTradeNotificationToTelegram } =
+      await import("../src/notifications");
     mockFetch.mockResolvedValue(new Response(null, { status: 200 }));
 
     await sendTradeNotificationToTelegram(
@@ -89,9 +86,8 @@ describe("sendTradeNotificationToTelegram", () => {
   });
 
   test("includes internal auth key when configured", async () => {
-    const { sendTradeNotificationToTelegram } = await import(
-      "../src/notifications"
-    );
+    const { sendTradeNotificationToTelegram } =
+      await import("../src/notifications");
     mockFetch.mockResolvedValue(new Response(null, { status: 200 }));
 
     await sendTradeNotificationToTelegram(
@@ -110,12 +106,9 @@ describe("sendTradeNotificationToTelegram", () => {
   });
 
   test("handles TELEGRAM_SERVICE non-ok response gracefully", async () => {
-    const { sendTradeNotificationToTelegram } = await import(
-      "../src/notifications"
-    );
-    mockFetch.mockResolvedValue(
-      new Response("Service error", { status: 503 })
-    );
+    const { sendTradeNotificationToTelegram } =
+      await import("../src/notifications");
+    mockFetch.mockResolvedValue(new Response("Service error", { status: 503 }));
 
     // Should not throw
     await sendTradeNotificationToTelegram(
@@ -130,9 +123,8 @@ describe("sendTradeNotificationToTelegram", () => {
   });
 
   test("handles TELEGRAM_SERVICE fetch exception gracefully", async () => {
-    const { sendTradeNotificationToTelegram } = await import(
-      "../src/notifications"
-    );
+    const { sendTradeNotificationToTelegram } =
+      await import("../src/notifications");
     mockFetch.mockRejectedValue(new Error("Network error"));
 
     // Should not throw
@@ -151,7 +143,9 @@ describe("sendTradeNotificationToTelegram", () => {
 describe("sendTradeNotification", () => {
   test("forwards queue message to sendTradeNotificationToTelegram", async () => {
     const mockEnv = {
-      TELEGRAM_SERVICE: { fetch: mock(() => new Response(null, { status: 200 })) },
+      TELEGRAM_SERVICE: {
+        fetch: mock(() => new Response(null, { status: 200 })),
+      },
       TELEGRAM_INTERNAL_KEY_BINDING: "key",
     };
     const { sendTradeNotification } = await import("../src/notifications");

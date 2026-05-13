@@ -49,7 +49,10 @@ export class BinanceClient implements IBinanceClient {
   private readonly apiSecret: string;
   private readonly baseUrl: string = "https://fapi.binance.com"; // Futures API
 
-  private logger = createLogger({ service: "trade-worker", module: "binance-client" });
+  private logger = createLogger({
+    service: "trade-worker",
+    module: "binance-client",
+  });
 
   constructor(apiKey: string, apiSecret: string) {
     if (!apiKey || !apiSecret) {
@@ -125,7 +128,10 @@ export class BinanceClient implements IBinanceClient {
     const response = await fetch(url, options);
     const responseData: BinanceApiResponse<T> = await response.json();
 
-    this.logger.info("Binance response", { status: response.status, body: JSON.stringify(responseData) });
+    this.logger.info("Binance response", {
+      status: response.status,
+      body: JSON.stringify(responseData),
+    });
 
     if (!response.ok) {
       const error = responseData as BinanceErrorResponse;

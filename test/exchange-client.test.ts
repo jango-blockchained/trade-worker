@@ -36,7 +36,7 @@ class TestClient extends BaseExchangeClient {
   }
 
   protected generateSignature(
-    _params: Record<string, string | number | boolean>,
+    _params: Record<string, string | number | boolean>
   ): Promise<string> {
     return Promise.resolve("sig");
   }
@@ -44,7 +44,7 @@ class TestClient extends BaseExchangeClient {
   protected buildHeaders(
     _method: string,
     _path: string,
-    _params?: Record<string, string | number | boolean>,
+    _params?: Record<string, string | number | boolean>
   ): Headers {
     return new Headers();
   }
@@ -93,15 +93,15 @@ describe("BaseExchangeClient constructor", () => {
   });
 
   test("throws when apiKey is missing", () => {
-    expect(
-      () => new TestClient({ apiKey: "", apiSecret: "secret" }),
-    ).toThrow("API key and secret are required.");
+    expect(() => new TestClient({ apiKey: "", apiSecret: "secret" })).toThrow(
+      "API key and secret are required."
+    );
   });
 
   test("throws when apiSecret is missing", () => {
-    expect(
-      () => new TestClient({ apiKey: "key", apiSecret: "" }),
-    ).toThrow("API key and secret are required.");
+    expect(() => new TestClient({ apiKey: "key", apiSecret: "" })).toThrow(
+      "API key and secret are required."
+    );
   });
 
   test("uses default baseUrl from getDefaultBaseUrl()", () => {
@@ -130,7 +130,7 @@ describe("BaseExchangeClient trade methods", () => {
         side: "long",
         quantity: 0.5,
         orderType: "MARKET",
-      }),
+      })
     );
     expect(result).toEqual({
       orderId: "test",
@@ -152,7 +152,7 @@ describe("BaseExchangeClient trade methods", () => {
         quantity: 1.2,
         price: 1800,
         orderType: "LIMIT",
-      }),
+      })
     );
     expect(result).toEqual({
       orderId: "test",
@@ -173,7 +173,7 @@ describe("BaseExchangeClient trade methods", () => {
         side: "long",
         quantity: 0.3,
         reduceOnly: true,
-      }),
+      })
     );
   });
 
@@ -189,7 +189,7 @@ describe("BaseExchangeClient trade methods", () => {
         side: "short",
         quantity: 5,
         reduceOnly: true,
-      }),
+      })
     );
   });
 });

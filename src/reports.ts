@@ -28,7 +28,10 @@ export async function saveReportToR2(
   env: ReportsEnv
 ): Promise<void> {
   if (!env.REPORTS_BUCKET) {
-    logger.error("REPORTS_BUCKET binding is not configured. Skipping report save.", { dbLogId });
+    logger.error(
+      "REPORTS_BUCKET binding is not configured. Skipping report save.",
+      { dbLogId }
+    );
     return;
   }
 
@@ -62,7 +65,10 @@ export async function saveReportToR2(
       // },
     });
 
-    logger.info("Successfully saved report to R2", { dbLogId, etag: r2Object?.etag });
+    logger.info("Successfully saved report to R2", {
+      dbLogId,
+      etag: r2Object?.etag,
+    });
   } catch (error: unknown) {
     const errorMsg = toError(error, "Unknown R2 error");
     logger.error("Failed to save report to R2", { dbLogId, error: errorMsg });

@@ -7,7 +7,10 @@ import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
 
-const logger = createLogger({ service: "trade-worker", module: "exchange-router" });
+const logger = createLogger({
+  service: "trade-worker",
+  module: "exchange-router",
+});
 
 export interface IExchangeProvider {
   name: string;
@@ -88,11 +91,16 @@ export class ExchangeRouter {
           const routingTable = JSON.parse(routingTableStr);
           if (routingTable[payload.symbol]) {
             exchange = routingTable[payload.symbol].toLowerCase();
-            logger.info("Dynamic route for symbol", { symbol: payload.symbol, exchange });
+            logger.info("Dynamic route for symbol", {
+              symbol: payload.symbol,
+              exchange,
+            });
           }
         }
       } catch (e) {
-        logger.error("Failed to parse routing table from KV", { error: toError(e) });
+        logger.error("Failed to parse routing table from KV", {
+          error: toError(e),
+        });
       }
     }
 

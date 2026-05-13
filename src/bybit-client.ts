@@ -68,7 +68,10 @@ export class BybitClient implements IBybitClient {
     }
     this.apiKey = apiKey;
     this.apiSecret = apiSecret;
-    this.logger = createLogger({ service: "trade-worker", module: "bybit-client" });
+    this.logger = createLogger({
+      service: "trade-worker",
+      module: "bybit-client",
+    });
   }
 
   /**
@@ -154,7 +157,9 @@ export class BybitClient implements IBybitClient {
     const responseData: BybitApiResponse<T> = await response.json();
 
     this.logger.info("Bybit Response Status", { status: response.status });
-    this.logger.info("Bybit Response Body", { body: JSON.stringify(responseData) });
+    this.logger.info("Bybit Response Body", {
+      body: JSON.stringify(responseData),
+    });
 
     if (responseData.retCode !== 0) {
       throw new Error(

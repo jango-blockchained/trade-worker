@@ -2,7 +2,10 @@ import type { Fetcher } from "@cloudflare/workers-types";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
 
-const logger = createLogger({ service: "trade-worker", module: "notifications" });
+const logger = createLogger({
+  service: "trade-worker",
+  module: "notifications",
+});
 
 // --- Type Definitions ---
 

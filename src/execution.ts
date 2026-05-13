@@ -140,7 +140,9 @@ export async function updateD1TradeRecords(
       ),
     ]);
   } catch (error: unknown) {
-    logger.error("Failed to update D1 trades and positions tables", { error: toError(error) });
+    logger.error("Failed to update D1 trades and positions tables", {
+      error: toError(error),
+    });
   }
 }
 
@@ -284,7 +286,9 @@ export async function executeTrade(
         }
       }
     } catch (error: unknown) {
-      logger.error("Failed to fetch risk management settings from KV", { error: toError(error) });
+      logger.error("Failed to fetch risk management settings from KV", {
+        error: toError(error),
+      });
     }
 
     if (maxPositionSize !== null && quantity > maxPositionSize) {
@@ -335,7 +339,9 @@ export async function executeTrade(
       try {
         await client.setLeverage(symbol, overriddenLeverage);
       } catch (leverageError) {
-        logger.error("Failed to set leverage", { error: toError(leverageError) });
+        logger.error("Failed to set leverage", {
+          error: toError(leverageError),
+        });
         // Continue with trade execution even if setting leverage fails
       }
     }
@@ -419,7 +425,9 @@ export async function executeTrade(
       try {
         await dbLogger.logResponse(dbLogId, response, null, startTime);
       } catch (logErr) {
-        logger.error("Failed to log error response to D1", { error: toError(logErr) });
+        logger.error("Failed to log error response to D1", {
+          error: toError(logErr),
+        });
       }
     }
 

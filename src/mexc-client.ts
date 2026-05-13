@@ -68,7 +68,10 @@ export class MexcClient implements IMexcClient {
     }
     this.apiKey = apiKey;
     this.apiSecret = apiSecret;
-    this.logger = createLogger({ service: "trade-worker", module: "mexc-client" });
+    this.logger = createLogger({
+      service: "trade-worker",
+      module: "mexc-client",
+    });
 
     // Pre-import the HMAC key to avoid expensive importKey on every request
     const encoder = new TextEncoder();
@@ -157,7 +160,9 @@ export class MexcClient implements IMexcClient {
     const responseData: MexcApiResponse<T> = await response.json();
 
     this.logger.info("MEXC Response Status", { status: response.status });
-    this.logger.info("MEXC Response Body", { body: JSON.stringify(responseData) });
+    this.logger.info("MEXC Response Body", {
+      body: JSON.stringify(responseData),
+    });
 
     if (!response.ok || responseData.code !== 200) {
       throw new Error(

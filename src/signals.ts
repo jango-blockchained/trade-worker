@@ -122,7 +122,9 @@ export async function handlePostSignalRequest(
   try {
     const result = await insertSignal(signalRecord, env);
     if (result.success) {
-      logger.info("Successfully inserted signal", { signalId: signalRecord.signal_id });
+      logger.info("Successfully inserted signal", {
+        signalId: signalRecord.signal_id,
+      });
       return createJsonResponse(
         { success: true, result: { signalId: signalRecord.signal_id } },
         201

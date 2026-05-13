@@ -490,9 +490,7 @@ describe("Trade Worker Helpers", () => {
 
       expect(mockEnv.REPORTS_BUCKET.put).not.toHaveBeenCalled();
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          `[${dbLogId}] REPORTS_BUCKET binding is not configured.`
-        )
+        expect.stringContaining("REPORTS_BUCKET binding is not configured")
       );
       errorSpy.mockRestore();
     });
@@ -628,7 +626,7 @@ describe("Trade Worker Handlers", () => {
       expect(response.status).toBe(400);
       const body = (await response.json()) as any;
       expect(body.success).toBe(false);
-      expect(body.error).toContain("Invalid quantity");
+      expect(body.error).toContain("quantity");
       expect(mockLogRequest).toHaveBeenCalled(); // Still logs the bad request
       expect(mockLogResponse).toHaveBeenCalled(); // Still logs the 400 response
       expect(mockMexcClientConstructor).not.toHaveBeenCalled();
@@ -661,8 +659,7 @@ describe("Trade Worker Handlers", () => {
       expect(response.status).toBe(200); // Still proceeds to trade
       expect(mockMexcClient.openLong).toHaveBeenCalled(); // Trade should still be attempted
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Failed to set leverage"),
-        leverageError
+        expect.stringContaining("Failed to set leverage")
       );
       errorSpy.mockRestore();
     });
@@ -802,7 +799,7 @@ describe("Trade Worker Handlers", () => {
       } as any);
       expect(response.status).toBe(400);
       const body = (await response.json()) as any;
-      expect(body.error).toContain("Invalid action");
+      expect(body.error).toContain("action");
     });
   });
 

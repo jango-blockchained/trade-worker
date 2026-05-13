@@ -164,10 +164,14 @@ async function queueReportSave(
 ): Promise<void> {
   if (tradeResult.success) {
     try {
-      logger.info(`[${requestId}] Trade successful, queueing report save to R2.`);
+      logger.info(
+        `[${requestId}] Trade successful, queueing report save to R2.`
+      );
       ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
     } catch (e) {
-      logger.error(`[${requestId}] Failed to queue R2 report save`, { error: toError(e) });
+      logger.error(`[${requestId}] Failed to queue R2 report save`, {
+        error: toError(e),
+      });
     }
   }
 }
@@ -390,20 +394,21 @@ async function handleWebhookRequest(
 
     // Track API call analytics (non-blocking)
     const webhookLatencyMs = Date.now() - startTime;
-    ctx.waitUntil(trackAnalytics(env, "/track/api-call", {
-      worker: "trade-worker",
-      endpoint: "/webhook",
-      latencyMs: webhookLatencyMs,
-      success: tradeResult.success,
-    }));
+    ctx.waitUntil(
+      trackAnalytics(env, "/track/api-call", {
+        worker: "trade-worker",
+        endpoint: "/webhook",
+        latencyMs: webhookLatencyMs,
+        success: tradeResult.success,
+      })
+    );
 
     return tradeResponse;
   } catch (error: unknown) {
     const errorMsg = toError(error, "Failed to process webhook request");
-    logger.error(
-      `Error in handleWebhookRequest for ID ${incomingRequestId}`,
-      { error: errorMsg }
-    );
+    logger.error(`Error in handleWebhookRequest for ID ${incomingRequestId}`, {
+      error: errorMsg,
+    });
     const response = createJsonResponse(
       {
         success: false,
@@ -411,32 +416,34 @@ async function handleWebhookRequest(
       },
       500
     );
-      // Log error response if dbLogId was obtained
-      if (dbLogId !== null) {
+    // Log error response if dbLogId was obtained
+    if (dbLogId !== null) {
+      await dbLogger.logResponse(dbLogId, response, error, startTime);
+    } else {
+      // Body already consumed by request.json() above, log URL and method instead
+      try {
+        logger.error("Failed to capture request body after error", {
+          url: request.url,
+          method: request.method,
+        });
+        dbLogId = await dbLogger.logRequest(
+          request,
+          `[body consumed] ${request.url}`
+        );
         await dbLogger.logResponse(dbLogId, response, error, startTime);
-      } else {
-        // Body already consumed by request.json() above, log URL and method instead
-        try {
-          logger.error("Failed to capture request body after error", {
-            url: request.url,
-            method: request.method,
-          });
-          dbLogId = await dbLogger.logRequest(request, `[body consumed] ${request.url}`);
-          await dbLogger.logResponse(dbLogId, response, error, startTime);
-        } catch (logError) {
-          logger.error(
-            "Failed to log error response after initial failure",
-            { error: toError(logError) }
-          );
-        }
+      } catch (logError) {
+        logger.error("Failed to log error response after initial failure", {
+          error: toError(logError),
+        });
       }
-      return response;
     }
+    return response;
   }
+}
 
-  /**
-   * Handles the standardized processing request (/process endpoint).
-   */
+/**
+ * Handles the standardized processing request (/process endpoint).
+ */
 async function handleProcessRequest(
   request: Request,
   env: Env,
@@ -454,10 +461,7 @@ async function handleProcessRequest(
     const internalAuthKey = data?.internalAuthKey;
 
     logger.info(`Processing /process request ID: ${incomingRequestId}`);
-    logger.info(
-      "Received standardized request",
-      { data }
-    );
+    logger.info("Received standardized request", { data });
 
     // Log the request *before* authentication check
     // Pass the full original body data for logging
@@ -478,9 +482,7 @@ async function handleProcessRequest(
     }
 
     if (!internalAuthKey || internalAuthKey !== expectedInternalKey) {
-      logger.warn(
-        `Authentication failed for request ID: ${incomingRequestId}`
-      );
+      logger.warn(`Authentication failed for request ID: ${incomingRequestId}`);
       const response = createJsonResponse(
         { success: false, error: "Authentication failed" },
         403
@@ -537,20 +539,21 @@ async function handleProcessRequest(
 
     // Track API call analytics (non-blocking)
     const processLatencyMs = Date.now() - startTime;
-    ctx.waitUntil(trackAnalytics(env, "/track/api-call", {
-      worker: "trade-worker",
-      endpoint: "/process",
-      latencyMs: processLatencyMs,
-      success: tradeResult.success,
-    }));
+    ctx.waitUntil(
+      trackAnalytics(env, "/track/api-call", {
+        worker: "trade-worker",
+        endpoint: "/process",
+        latencyMs: processLatencyMs,
+        success: tradeResult.success,
+      })
+    );
 
     return tradeResponse;
   } catch (error: unknown) {
     const errorMsg = toError(error, "Failed to process request");
-    logger.error(
-      `Error in handleProcessRequest for ID ${incomingRequestId}`,
-      { error: errorMsg }
-    );
+    logger.error(`Error in handleProcessRequest for ID ${incomingRequestId}`, {
+      error: errorMsg,
+    });
     const response = createJsonResponse(
       {
         success: false,
@@ -568,13 +571,15 @@ async function handleProcessRequest(
           url: request.url,
           method: request.method,
         });
-        dbLogId = await dbLogger.logRequest(request, `[body consumed] ${request.url}`);
+        dbLogId = await dbLogger.logRequest(
+          request,
+          `[body consumed] ${request.url}`
+        );
         await dbLogger.logResponse(dbLogId, response, error, startTime);
       } catch (logError) {
-        logger.error(
-          "Failed to log error response after initial failure",
-          { error: toError(logError) }
-        );
+        logger.error("Failed to log error response after initial failure", {
+          error: toError(logError),
+        });
       }
     }
     return response;

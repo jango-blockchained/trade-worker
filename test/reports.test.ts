@@ -1,4 +1,12 @@
-import { describe, test, expect, mock, jest, beforeEach, afterEach } from "bun:test";
+import {
+  describe,
+  test,
+  expect,
+  mock,
+  jest,
+  beforeEach,
+  afterEach,
+} from "bun:test";
 import { saveReportToR2, handleGetReportRequest } from "../src/reports";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
 
@@ -68,7 +76,11 @@ describe("saveReportToR2", () => {
   // Test 1: Filename format
   // --------------------------------------------------------------------------
   test("saves report to R2 with correct filename format", async () => {
-    const reportData = { orderId: "ord-789", status: "filled", filledPrice: 65100 };
+    const reportData = {
+      orderId: "ord-789",
+      status: "filled",
+      filledPrice: 65100,
+    };
     const dbLogId = "db-log-abc-456";
 
     await saveReportToR2(reportData, defaultPayload, dbLogId, {
@@ -294,7 +306,10 @@ describe("handleGetReportRequest", () => {
       tradeResult: { orderId: "ord-999" },
       dbLogId: "log-success",
     });
-    const mockObject = createMockR2ObjectBody(reportContent, "etag-hello-world");
+    const mockObject = createMockR2ObjectBody(
+      reportContent,
+      "etag-hello-world"
+    );
     mockGet = mock(() => mockObject);
     mockBucket.get = mockGet;
 

@@ -1,5 +1,6 @@
 // workers/trade-worker/src/binance-client.ts
 
+import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { bufferToHex } from "./shared/exchange-client";
 
 // Define interfaces for Binance API responses (adjust based on actual API)
@@ -47,6 +48,8 @@ export class BinanceClient implements IBinanceClient {
   private readonly apiKey: string;
   private readonly apiSecret: string;
   private readonly baseUrl: string = "https://fapi.binance.com"; // Futures API
+
+  private logger = createLogger({ service: "trade-worker", module: "binance-client" });
 
   constructor(apiKey: string, apiSecret: string) {
     if (!apiKey || !apiSecret) {
@@ -117,16 +120,12 @@ export class BinanceClient implements IBinanceClient {
     // Binance usually includes params in query string even for POST/DELETE
     // If body is needed for specific endpoints, adjust here
 
-    console.log(`Binance Request: ${method} ${url}`);
+    this.logger.info("Binance request", { method, url });
 
     const response = await fetch(url, options);
     const responseData: BinanceApiResponse<T> = await response.json();
 
-    console.log("Binance Response Status:", response.status);
-    console.log(
-      "Binance Response Body:",
-      JSON.stringify(responseData, null, 2)
-    );
+    this.logger.info("Binance response", { status: response.status, body: JSON.stringify(responseData) });
 
     if (!response.ok) {
       const error = responseData as BinanceErrorResponse;

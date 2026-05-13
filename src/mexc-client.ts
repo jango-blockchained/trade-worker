@@ -1,5 +1,7 @@
 // workers/trade-worker/src/mexc-client.ts
 
+import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
+import type { Logger } from "@jango-blockchained/hoox-shared/middleware";
 import { bufferToHex } from "./shared/exchange-client";
 
 // Define interfaces for MEXC API responses (adjust based on actual API)
@@ -58,6 +60,7 @@ export class MexcClient implements IMexcClient {
   private readonly apiSecret: string;
   private readonly baseUrl: string = "https://contract.mexc.com"; // Use V1 futures API
   private readonly importedKeyPromise: Promise<CryptoKey>;
+  private readonly logger: Logger;
 
   constructor(apiKey: string, apiSecret: string) {
     if (!apiKey || !apiSecret) {
@@ -65,6 +68,7 @@ export class MexcClient implements IMexcClient {
     }
     this.apiKey = apiKey;
     this.apiSecret = apiSecret;
+    this.logger = createLogger({ service: "trade-worker", module: "mexc-client" });
 
     // Pre-import the HMAC key to avoid expensive importKey on every request
     const encoder = new TextEncoder();
@@ -144,16 +148,16 @@ export class MexcClient implements IMexcClient {
       options.body = JSON.stringify(allParams);
     }
 
-    console.log(`MEXC Request: ${method} ${url.toString()}`);
+    this.logger.info("MEXC Request", { method, url: url.toString() });
     if (options.body) {
-      console.log(`MEXC Request Body: ${options.body}`);
+      this.logger.info("MEXC Request Body", { body: options.body });
     }
 
     const response = await fetch(url.toString(), options);
     const responseData: MexcApiResponse<T> = await response.json();
 
-    console.log("MEXC Response Status:", response.status);
-    console.log("MEXC Response Body:", JSON.stringify(responseData, null, 2));
+    this.logger.info("MEXC Response Status", { status: response.status });
+    this.logger.info("MEXC Response Body", { body: JSON.stringify(responseData) });
 
     if (!response.ok || responseData.code !== 200) {
       throw new Error(
@@ -216,8 +220,7 @@ export class MexcClient implements IMexcClient {
     }
 
     if (params.reduceOnly) {
-      console.warn("MEXC V1 API reduceOnly parameter needs verification.");
-      // Add parameter if V1 supports it, e.g., apiParams.reduceOnly = true;
+      this.logger.warn("MEXC V1 API reduceOnly parameter needs verification");
     }
 
     return this.makeRequest<any>("POST", path, apiParams);

@@ -1,5 +1,9 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
+import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
+import { toError } from "@jango-blockchained/hoox-shared/errors";
+
+const logger = createLogger({ service: "trade-worker", module: "reports" });
 
 // --- Type Definitions ---
 
@@ -24,9 +28,7 @@ export async function saveReportToR2(
   env: ReportsEnv
 ): Promise<void> {
   if (!env.REPORTS_BUCKET) {
-    console.error(
-      `[${dbLogId}] REPORTS_BUCKET binding is not configured. Skipping report save.`
-    );
+    logger.error("REPORTS_BUCKET binding is not configured. Skipping report save.", { dbLogId });
     return;
   }
 
@@ -47,7 +49,7 @@ export async function saveReportToR2(
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-"); // Filesystem-friendly timestamp
     const filename = `trade-reports/${payload.exchange}/${payload.symbol}/${timestamp}-${dbLogId || "no-id"}.json`;
 
-    console.log(`[${dbLogId}] Attempting to save report to R2: ${filename}`);
+    logger.info("Attempting to save report to R2", { dbLogId, filename });
 
     // Put the object into the R2 bucket
     const r2Object = await env.REPORTS_BUCKET.put(filename, reportContent, {
@@ -60,19 +62,10 @@ export async function saveReportToR2(
       // },
     });
 
-    console.log(
-      `[${dbLogId}] Successfully saved report to R2. ETag: ${r2Object?.etag}`
-    );
+    logger.info("Successfully saved report to R2", { dbLogId, etag: r2Object?.etag });
   } catch (error: unknown) {
-    const errorMsg =
-      error instanceof Error
-        ? error.message
-        : String(error || "Unknown R2 error");
-    console.error(
-      `[${dbLogId}] Failed to save report to R2: ${errorMsg}`,
-      error
-    );
-    // Decide if this error should trigger an alert or other action
+    const errorMsg = toError(error, "Unknown R2 error");
+    logger.error("Failed to save report to R2", { dbLogId, error: errorMsg });
   }
 }
 
@@ -93,22 +86,20 @@ export async function handleGetReportRequest(
   }
 
   if (!env.REPORTS_BUCKET) {
-    console.error("REPORTS_BUCKET binding is not configured.");
+    logger.error("REPORTS_BUCKET binding is not configured");
     return new Response("R2 service not configured.", { status: 500 });
   }
 
   try {
-    console.log(`Attempting to retrieve R2 object with key: ${key}`);
+    logger.info("Attempting to retrieve R2 object", { key });
     const object = await env.REPORTS_BUCKET.get(key);
 
     if (object === null) {
-      console.log(`R2 object not found for key: ${key}`);
+      logger.info("R2 object not found", { key });
       return new Response("Report not found", { status: 404 });
     }
 
-    console.log(
-      `Successfully retrieved R2 object: ${key}, Size: ${object.size}`
-    );
+    logger.info("Successfully retrieved R2 object", { key, size: object.size });
 
     // Prepare headers for the response
     const headers = new Headers() as any;
@@ -120,11 +111,8 @@ export async function handleGetReportRequest(
       headers,
     });
   } catch (error: unknown) {
-    const errorMsg =
-      error instanceof Error
-        ? error.message
-        : String(error || "Unknown R2 get error");
-    console.error(`Failed to retrieve R2 object ${key}: ${errorMsg}`, error);
+    const errorMsg = toError(error, "Unknown R2 get error");
+    logger.error("Failed to retrieve R2 object", { key, error: errorMsg });
     return new Response(`Failed to retrieve report: ${errorMsg}`, {
       status: 500,
     });

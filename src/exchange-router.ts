@@ -4,6 +4,10 @@ import { BybitClient } from "./bybit-client";
 import type { Env, IExchangeClient } from "./index";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
 import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
+import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
+import { toError } from "@jango-blockchained/hoox-shared/errors";
+
+const logger = createLogger({ service: "trade-worker", module: "exchange-router" });
 
 export interface IExchangeProvider {
   name: string;
@@ -84,13 +88,11 @@ export class ExchangeRouter {
           const routingTable = JSON.parse(routingTableStr);
           if (routingTable[payload.symbol]) {
             exchange = routingTable[payload.symbol].toLowerCase();
-            console.log(
-              `[Router] Dynamic route for ${payload.symbol} to ${exchange}`
-            );
+            logger.info("Dynamic route for symbol", { symbol: payload.symbol, exchange });
           }
         }
       } catch (e) {
-        console.error("Failed to parse routing table from KV:", e);
+        logger.error("Failed to parse routing table from KV", { error: toError(e) });
       }
     }
 

@@ -289,13 +289,9 @@ describe("MexcClient (V1 Futures)", () => {
       reduceOnly: true,
     };
     const makeRequestSpy = spyOn(client as any, "makeRequest");
-    const warnSpy = spyOn(console, "warn"); // Spy on warning for reduceOnly
 
     await client.executeTrade(params);
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      "MEXC V1 API reduceOnly parameter needs verification."
-    );
     expect(makeRequestSpy).toHaveBeenCalledWith(
       "POST",
       "/api/v1/private/order/submit",

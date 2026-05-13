@@ -56,7 +56,7 @@ describe("saveReportToR2", () => {
 
     // Spy on console methods so they don't pollute output and can be asserted
     consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
-    consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    consoleLogSpy = jest.spyOn(console, "info").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -178,10 +178,9 @@ describe("saveReportToR2", () => {
       })
     ).resolves.toBeUndefined();
 
-    // Should log the error details
+    // Should log the error details in JSON format
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to save report to R2"),
-      r2Error
+      expect.stringContaining("Failed to save report to R2")
     );
   });
 
@@ -203,8 +202,7 @@ describe("saveReportToR2", () => {
     ).resolves.toBeUndefined();
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to save report to R2"),
-      r2Error
+      expect.stringContaining("Failed to save report to R2")
     );
   });
 });
@@ -224,7 +222,7 @@ describe("handleGetReportRequest", () => {
     mockBucket = { get: mockGet };
 
     consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
-    consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    consoleLogSpy = jest.spyOn(console, "info").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -361,10 +359,9 @@ describe("handleGetReportRequest", () => {
     const body = await response.text();
     expect(body).toContain("Failed to retrieve report");
 
-    // Verify error was logged
+    // Verify error was logged (logger outputs JSON, so check message is contained)
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to retrieve R2 object"),
-      r2GetError
+      expect.stringContaining("Failed to retrieve R2 object")
     );
   });
 
@@ -388,8 +385,7 @@ describe("handleGetReportRequest", () => {
     expect(response.headers.get("etag")).toBeNull();
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to retrieve R2 object"),
-      r2Error
+      expect.stringContaining("Failed to retrieve R2 object")
     );
   });
 });

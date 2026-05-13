@@ -1,5 +1,7 @@
 // workers/trade-worker/src/bybit-client.ts
 
+import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
+import type { Logger } from "@jango-blockchained/hoox-shared/middleware";
 import { bufferToHex } from "./shared/exchange-client";
 
 // Define interfaces for Bybit V5 API responses
@@ -58,6 +60,7 @@ export class BybitClient implements IBybitClient {
   private readonly apiSecret: string;
   private readonly baseUrl: string = "https://api.bybit.com";
   private readonly recvWindow: number = 5000; // Bybit specific recv_window
+  private readonly logger: Logger;
 
   constructor(apiKey: string, apiSecret: string) {
     if (!apiKey || !apiSecret) {
@@ -65,6 +68,7 @@ export class BybitClient implements IBybitClient {
     }
     this.apiKey = apiKey;
     this.apiSecret = apiSecret;
+    this.logger = createLogger({ service: "trade-worker", module: "bybit-client" });
   }
 
   /**
@@ -141,16 +145,16 @@ export class BybitClient implements IBybitClient {
       options.body = paramsStr;
     }
 
-    console.log(`Bybit Request: ${method} ${finalUrl}`);
+    this.logger.info("Bybit Request", { method, url: finalUrl });
     if (options.body) {
-      console.log(`Bybit Request Body: ${options.body}`);
+      this.logger.info("Bybit Request Body", { body: options.body });
     }
 
     const response = await fetch(finalUrl, options);
     const responseData: BybitApiResponse<T> = await response.json();
 
-    console.log("Bybit Response Status:", response.status);
-    console.log("Bybit Response Body:", JSON.stringify(responseData, null, 2));
+    this.logger.info("Bybit Response Status", { status: response.status });
+    this.logger.info("Bybit Response Body", { body: JSON.stringify(responseData) });
 
     if (responseData.retCode !== 0) {
       throw new Error(

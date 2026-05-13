@@ -7,7 +7,10 @@ import {
   createJsonResponse,
   toError,
 } from "@jango-blockchained/hoox-shared/errors";
+import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
+
+const logger = createLogger({ service: "trade-worker", module: "execution" });
 import {
   trackAnalytics,
   type AnalyticsEnv,
@@ -44,7 +47,7 @@ export interface ExecutionEnv extends AnalyticsEnv {
 }
 
 // Generic client interface (mirrored from index.ts to avoid circular dependency)
-interface IExchangeClient {
+export interface IExchangeClient {
   getAccountInfo: () => Promise<any>;
   setLeverage?: (symbol: string, leverage: number) => Promise<any>;
   openLong: (
@@ -137,7 +140,7 @@ export async function updateD1TradeRecords(
       ),
     ]);
   } catch (error: unknown) {
-    console.error("Failed to update D1 trades and positions tables", error);
+    logger.error("Failed to update D1 trades and positions tables", { error: toError(error) });
   }
 }
 
@@ -269,7 +272,7 @@ export async function executeTrade(
         );
         if (defaultLevStr && !overriddenLeverage) {
           overriddenLeverage = parseInt(defaultLevStr, 10);
-          console.log(
+          logger.info(
             `[Risk Management] Applied default leverage: ${overriddenLeverage}`
           );
         }
@@ -281,12 +284,12 @@ export async function executeTrade(
         }
       }
     } catch (error: unknown) {
-      console.error("Failed to fetch risk management settings from KV:", error);
+      logger.error("Failed to fetch risk management settings from KV", { error: toError(error) });
     }
 
     if (maxPositionSize !== null && quantity > maxPositionSize) {
       const errorMsg = `Trade quantity (${quantity}) exceeds maximum allowed size (${maxPositionSize})`;
-      console.error(errorMsg);
+      logger.error(errorMsg);
       const result: TradeExecutionResult = {
         success: false,
         error: errorMsg,
@@ -313,7 +316,7 @@ export async function executeTrade(
       routedExchange = routeResult.exchange;
     } catch (error: unknown) {
       const errorMsg = toError(error, `Failed to route exchange: ${exchange}`);
-      console.error(errorMsg);
+      logger.error(errorMsg);
       const result: TradeExecutionResult = {
         success: false,
         error: errorMsg,
@@ -332,7 +335,7 @@ export async function executeTrade(
       try {
         await client.setLeverage(symbol, overriddenLeverage);
       } catch (leverageError) {
-        console.error(`Failed to set leverage:`, leverageError);
+        logger.error("Failed to set leverage", { error: toError(leverageError) });
         // Continue with trade execution even if setting leverage fails
       }
     }
@@ -354,7 +357,7 @@ export async function executeTrade(
       // No default needed due to validation earlier
     }
 
-    console.log("Trade execution successful:", result);
+    logger.info("Trade execution successful", { result });
 
     // Update D1 tables with trade and position data
     if (env.D1_SERVICE) {
@@ -404,7 +407,7 @@ export async function executeTrade(
     return tradeResult;
   } catch (error: unknown) {
     const errorMsg = toError(error, "Internal server error");
-    console.error("Error in executeTrade:", errorMsg, error);
+    logger.error("Error in executeTrade", { errorMsg, error: toError(error) });
     const tradeResult: TradeExecutionResult = {
       success: false,
       error: `Trade execution failed: ${errorMsg}`,
@@ -416,7 +419,7 @@ export async function executeTrade(
       try {
         await dbLogger.logResponse(dbLogId, response, null, startTime);
       } catch (logErr) {
-        console.error("Failed to log error response to D1:", logErr);
+        logger.error("Failed to log error response to D1", { error: toError(logErr) });
       }
     }
 

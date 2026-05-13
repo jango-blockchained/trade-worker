@@ -44,7 +44,7 @@ describe("DbLogger", () => {
     const disabledLogger = new DbLogger(mockEnv as any);
     expect((disabledLogger as any).enabled).toBe(false);
     expect(warnSpy).toHaveBeenCalledWith(
-      "SYSTEM_LOGS_BUCKET binding not found. Verbose request logging disabled."
+      expect.stringContaining("SYSTEM_LOGS_BUCKET binding not found.")
     );
     warnSpy.mockRestore();
   });
@@ -102,8 +102,7 @@ describe("DbLogger", () => {
 
     expect(result).toBeNull();
     expect(errorSpy).toHaveBeenCalledWith(
-      "Error logging request via R2:",
-      putError
+      expect.stringContaining("Error logging request via R2")
     );
     errorSpy.mockRestore();
   });
@@ -174,8 +173,7 @@ describe("DbLogger", () => {
     ).resolves.toBeUndefined();
 
     expect(errorSpy).toHaveBeenCalledWith(
-      "Error logging response via R2:",
-      putError
+      expect.stringContaining("Error logging response via R2")
     );
     errorSpy.mockRestore();
   });

@@ -1,8 +1,12 @@
 import type { D1Database, D1Result } from "@cloudflare/workers-types";
+import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import {
   createErrorResponse,
   createJsonResponse,
+  toError,
 } from "@jango-blockchained/hoox-shared/errors";
+
+const logger = createLogger({ service: "trade-worker", module: "signals" });
 
 // --- Type Definitions ---
 
@@ -118,20 +122,20 @@ export async function handlePostSignalRequest(
   try {
     const result = await insertSignal(signalRecord, env);
     if (result.success) {
-      console.log(`Successfully inserted signal ID: ${signalRecord.signal_id}`);
+      logger.info("Successfully inserted signal", { signalId: signalRecord.signal_id });
       return createJsonResponse(
         { success: true, result: { signalId: signalRecord.signal_id } },
         201
       ); // 201 Created
     } else {
-      console.error("D1 insert failed:", result.error);
+      logger.error("D1 insert failed", { error: result.error });
       return createJsonResponse(
         { success: false, error: "Failed to store signal in database." },
         500
       );
     }
   } catch (error) {
-    console.error("Error inserting signal into D1:", error);
+    logger.error("Error inserting signal into D1", { error: toError(error) });
     return createJsonResponse(
       { success: false, error: "Internal server error while storing signal." },
       500
@@ -168,7 +172,7 @@ export async function handleGetSignalsRequest(
       200
     );
   } catch (error) {
-    console.error("Error retrieving signals from D1:", error);
+    logger.error("Error retrieving signals from D1", { error: toError(error) });
     return createJsonResponse(
       {
         success: false,

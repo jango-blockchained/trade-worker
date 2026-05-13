@@ -29,6 +29,7 @@
 // Define Env structure expected by the logger
 // This should align with the Env interface in index.ts
 import type { R2Bucket, Fetcher } from "@cloudflare/workers-types";
+import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 
 interface LoggerEnv {
   D1_SERVICE?: Fetcher;
@@ -50,6 +51,8 @@ export interface IDbLogger {
 /**
  * Database logging utility for trade worker using R2.
  */
+const logger = createLogger({ service: "trade-worker", module: "db-logger" });
+
 export class DbLogger implements IDbLogger {
   private env: LoggerEnv;
   private enabled: boolean;
@@ -58,7 +61,7 @@ export class DbLogger implements IDbLogger {
     this.env = env;
     this.enabled = !!env.SYSTEM_LOGS_BUCKET;
     if (!this.enabled) {
-      console.warn(
+      logger.warn(
         "SYSTEM_LOGS_BUCKET binding not found. Verbose request logging disabled."
       );
     }
@@ -134,7 +137,7 @@ export class DbLogger implements IDbLogger {
 
       return logId;
     } catch (error: unknown) {
-      console.error("Error logging request via R2:", error);
+      logger.error("Error logging request via R2", { error });
       return null;
     }
   }
@@ -172,10 +175,10 @@ export class DbLogger implements IDbLogger {
             if (headersObject[h]) headersObject[h] = "[REDACTED]";
           }
         } catch (e) {
-          console.error("Failed to get headers:", e);
+          logger.error("Failed to get headers", { error: e });
         }
       } else {
-        console.warn("response.headers is missing for logResponse");
+        logger.warn("response.headers is missing for logResponse");
       }
 
       const responseBody = response.body ? await response.clone().text() : null;
@@ -203,9 +206,9 @@ export class DbLogger implements IDbLogger {
         }
       );
 
-      console.log(`Logged response for request ID: ${requestId}`);
+      logger.info("Logged response for request ID", { requestId });
     } catch (error: unknown) {
-      console.error("Error logging response via R2:", error);
+      logger.error("Error logging response via R2", { error });
     }
   }
 }

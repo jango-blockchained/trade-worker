@@ -1,5 +1,8 @@
 import type { Fetcher } from "@cloudflare/workers-types";
+import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
+
+const logger = createLogger({ service: "trade-worker", module: "notifications" });
 
 // --- Type Definitions ---
 
@@ -55,24 +58,26 @@ export async function sendTradeNotificationToTelegram(
       );
     }
 
-    console.log(`[${dbLogId}] Calling TELEGRAM_SERVICE for notification...`);
+    logger.info("Calling TELEGRAM_SERVICE for notification", { dbLogId });
     const notificationResponse = await env.TELEGRAM_SERVICE.fetch(
       telegramWorkerRequest as unknown as Request
     );
 
     if (!notificationResponse.ok) {
-      console.error(
-        `[${dbLogId}] Error calling TELEGRAM_SERVICE for notification: ${notificationResponse.status} ${await notificationResponse.text()}`
-      );
+      logger.error("Error calling TELEGRAM_SERVICE for notification", {
+        dbLogId,
+        status: notificationResponse.status,
+        responseText: await notificationResponse.text(),
+      });
     } else {
-      console.log(`[${dbLogId}] Notification sent via TELEGRAM_SERVICE.`);
+      logger.info("Notification sent via TELEGRAM_SERVICE", { dbLogId });
     }
   } catch (notificationError: unknown) {
     const errorMsg = toError(notificationError, "Unknown notification error");
-    console.error(
-      `[${dbLogId}] Exception calling TELEGRAM_SERVICE for notification:`,
-      errorMsg
-    );
+    logger.error("Exception calling TELEGRAM_SERVICE for notification", {
+      dbLogId,
+      error: errorMsg,
+    });
   }
 }
 

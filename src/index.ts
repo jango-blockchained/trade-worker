@@ -22,10 +22,12 @@ import {
 import {
   createLogger,
   withRequestLog,
+  validateJson,
 } from "@jango-blockchained/hoox-shared/middleware";
 import { createRouter } from "@jango-blockchained/hoox-shared/router";
 import {
   WebhookPayload,
+  WebhookPayloadSchema,
   ProcessRequestBody,
 } from "@jango-blockchained/hoox-shared/types";
 import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
@@ -34,11 +36,11 @@ import { healthCheck } from "@jango-blockchained/hoox-shared/health";
 import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 import {
   executeTrade,
-  validateTradePayload,
   validateApiCredentials,
   updateD1TradeRecords,
   type ExecutionEnv,
   type TradeExecutionResult,
+  type IExchangeClient,
 } from "./execution";
 import {
   insertSignal,
@@ -55,25 +57,7 @@ import {
 
 // --- Type Definitions ---
 
-// Define the expected environment variables and bindings from wrangler.toml
-export interface Env extends AnalyticsEnv {
-  // Database
-  DB?: D1Database;
-
-  // KV Namespace
-  CONFIG_KV?: KVNamespace;
-
-  // Secrets
-  INTERNAL_KEY_BINDING?: string;
-  TELEGRAM_INTERNAL_KEY_BINDING?: string;
-  MEXC_KEY_BINDING?: string;
-  MEXC_SECRET_BINDING?: string;
-  BINANCE_KEY_BINDING?: string;
-  BINANCE_SECRET_BINDING?: string;
-  BYBIT_KEY_BINDING?: string;
-  BYBIT_SECRET_BINDING?: string;
-  TRADE_QUEUE?: Queue;
-
+export interface Env extends Cloudflare.Env, AnalyticsEnv {
   // Optional Mocks for Testing
   __mocks__?: {
     MexcClient?: typeof MexcClient; // Constructor type
@@ -83,12 +67,6 @@ export interface Env extends AnalyticsEnv {
   };
 
   ENABLE_DEBUG_ENDPOINTS?: string;
-  AI?: Ai;
-  D1_SERVICE?: Fetcher;
-  REPORTS_BUCKET?: R2Bucket;
-  TELEGRAM_SERVICE?: Fetcher;
-
-  // Add other variables/bindings if needed
 }
 
 // Payload structure for legacy /process requests
@@ -118,7 +96,7 @@ async function executeTradeFromQueue(
       leverage: trade.leverage,
     };
 
-    const dbLogger = new DbLogger(env as unknown as ExecutionEnv);
+    const dbLogger = new DbLogger(env as ExecutionEnv);
     const startTime = Date.now();
     const tradeResult = await executeTrade(
       payload,
@@ -160,11 +138,11 @@ async function logFailedTrade(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(logPayload),
-        }) as unknown as Request
+        })
       );
     }
   } catch (error: unknown) {
-    console.error("Failed to log failed trade:", error);
+    logger.error("Failed to log failed trade", { error: toError(error) });
   }
 }
 
@@ -186,12 +164,10 @@ async function queueReportSave(
 ): Promise<void> {
   if (tradeResult.success) {
     try {
-      console.log(
-        `[${requestId}] Trade successful, queueing report save to R2.`
-      );
+      logger.info(`[${requestId}] Trade successful, queueing report save to R2.`);
       ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
     } catch (e) {
-      console.error(`[${requestId}] Failed to queue R2 report save:`, e);
+      logger.error(`[${requestId}] Failed to queue R2 report save`, { error: toError(e) });
     }
   }
 }
@@ -254,11 +230,12 @@ export default {
     env: Env,
     ctx: ExecutionContext
   ): Promise<void> {
-    console.log(`[Queue] Received ${messages.length} message(s)`);
+    logger.info(`[Queue] Received ${messages.length} message(s)`);
 
     for (const msg of messages) {
+      // TODO: fix queue handler signature — QueueEvent wraps Message<Body>, needs batch.messages iteration
       const trade = (msg as unknown as { body: TradeQueueMessage }).body;
-      console.log(
+      logger.info(
         `[Queue] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`
       );
 
@@ -271,7 +248,7 @@ export default {
         const result = await executeTradeFromQueue(trade, env);
 
         if (result.success) {
-          console.log(
+          logger.info(
             `[Queue] Trade executed successfully: ${trade.requestId}`
           );
           // Send notification if configured
@@ -281,18 +258,19 @@ export default {
         }
       } catch (error: unknown) {
         const errorMsg = toError(error);
-        console.error(
+        logger.error(
           `[Queue] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`
         );
 
         if (retryCount < MAX_RETRIES) {
           const delaySeconds =
             BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
-          console.log(
+          logger.info(
             `[Queue] Scheduling retry for ${trade.requestId} in ${delaySeconds}s (attempt ${retryCount + 2})`
           );
 
           // Re-queue with delay using the message's retry mechanism
+          // TODO: fix queue handler signature — retry is on Message<Body>, not QueueEvent
           (
             msg as unknown as {
               retry?: (opts: { delaySeconds: number }) => void;
@@ -301,7 +279,7 @@ export default {
             delaySeconds,
           });
         } else {
-          console.error(
+          logger.error(
             `[Queue] Max retries exceeded for ${trade.requestId}, moving to DLQ`
           );
 
@@ -332,15 +310,15 @@ async function handleWebhookRequest(
   const startTime = Date.now();
   // Use mock or real DbLogger
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
-  const dbLogger = new DbLoggerClass(env as unknown as ExecutionEnv);
+  const dbLogger = new DbLoggerClass(env as ExecutionEnv);
   let dbLogId: string | null = null;
   const incomingRequestId =
     request.headers.get("X-Request-ID") || crypto.randomUUID();
 
   try {
     const payload: WebhookPayload = await request.json();
-    console.log(`Processing webhook request ID: ${incomingRequestId}`);
-    console.log("Received webhook payload:", JSON.stringify(payload, null, 2));
+    logger.info(`Processing webhook request ID: ${incomingRequestId}`);
+    logger.info("Received webhook payload", { payload });
 
     // Assuming logRequest can handle the payload directly and returns a number ID
     // Might need adjustment based on DbLogger implementation
@@ -351,7 +329,7 @@ async function handleWebhookRequest(
     const expectedInternalKey = env.INTERNAL_KEY_BINDING;
 
     if (!expectedInternalKey) {
-      console.error(
+      logger.error(
         "INTERNAL_KEY_BINDING not configured for /webhook endpoint."
       );
       const response = createJsonResponse(
@@ -363,7 +341,7 @@ async function handleWebhookRequest(
     }
 
     if (!internalAuthKey || internalAuthKey !== expectedInternalKey) {
-      console.warn(
+      logger.warn(
         `Authentication failed for webhook request ID: ${incomingRequestId}`
       );
       const response = createJsonResponse(
@@ -374,8 +352,8 @@ async function handleWebhookRequest(
       return response;
     }
 
-    const validation = validateTradePayload(payload);
-    if (!validation.isValid) {
+    const validation = validateJson(WebhookPayloadSchema, payload);
+    if (!validation.ok) {
       const response = createJsonResponse(
         { success: false, error: validation.error },
         400
@@ -384,9 +362,12 @@ async function handleWebhookRequest(
       return response;
     }
 
+    // *** Use validated payload ***
+    const validatedPayload = validation.value;
+
     // *** Call executeTrade ***
     const tradeResult = await executeTrade(
-      payload,
+      validatedPayload,
       env,
       dbLogger,
       startTime,
@@ -400,7 +381,7 @@ async function handleWebhookRequest(
     // Queue R2 report save (if trade was successful)
     await queueReportSave(
       tradeResult,
-      payload,
+      validatedPayload,
       dbLogId,
       env,
       ctx,
@@ -409,19 +390,19 @@ async function handleWebhookRequest(
 
     // Track API call analytics (non-blocking)
     const webhookLatencyMs = Date.now() - startTime;
-    trackAnalytics(env, "/track/api-call", {
+    ctx.waitUntil(trackAnalytics(env, "/track/api-call", {
       worker: "trade-worker",
       endpoint: "/webhook",
       latencyMs: webhookLatencyMs,
       success: tradeResult.success,
-    });
+    }));
 
     return tradeResponse;
   } catch (error: unknown) {
     const errorMsg = toError(error, "Failed to process webhook request");
-    console.error(
-      `Error in handleWebhookRequest for ID ${incomingRequestId}:`,
-      errorMsg
+    logger.error(
+      `Error in handleWebhookRequest for ID ${incomingRequestId}`,
+      { error: errorMsg }
     );
     const response = createJsonResponse(
       {
@@ -430,28 +411,32 @@ async function handleWebhookRequest(
       },
       500
     );
-    // Log error response if dbLogId was obtained
-    if (dbLogId !== null) {
-      await dbLogger.logResponse(dbLogId, response, error, startTime);
-    } else {
-      try {
-        const rawBody = await request.clone().text();
-        dbLogId = await dbLogger.logRequest(request, rawBody); // Log raw body
+      // Log error response if dbLogId was obtained
+      if (dbLogId !== null) {
         await dbLogger.logResponse(dbLogId, response, error, startTime);
-      } catch (logError) {
-        console.error(
-          "Failed to log error response after initial failure:",
-          logError
-        );
+      } else {
+        // Body already consumed by request.json() above, log URL and method instead
+        try {
+          logger.error("Failed to capture request body after error", {
+            url: request.url,
+            method: request.method,
+          });
+          dbLogId = await dbLogger.logRequest(request, `[body consumed] ${request.url}`);
+          await dbLogger.logResponse(dbLogId, response, error, startTime);
+        } catch (logError) {
+          logger.error(
+            "Failed to log error response after initial failure",
+            { error: toError(logError) }
+          );
+        }
       }
+      return response;
     }
-    return response;
   }
-}
 
-/**
- * Handles the standardized processing request (/process endpoint).
- */
+  /**
+   * Handles the standardized processing request (/process endpoint).
+   */
 async function handleProcessRequest(
   request: Request,
   env: Env,
@@ -459,7 +444,7 @@ async function handleProcessRequest(
 ): Promise<Response> {
   const startTime = Date.now();
   const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
-  const dbLogger = new DbLoggerClass(env as unknown as ExecutionEnv);
+  const dbLogger = new DbLoggerClass(env as ExecutionEnv);
   let dbLogId: string | null = null;
   let incomingRequestId: string | undefined;
 
@@ -468,10 +453,10 @@ async function handleProcessRequest(
     incomingRequestId = data?.requestId;
     const internalAuthKey = data?.internalAuthKey;
 
-    console.log(`Processing /process request ID: ${incomingRequestId}`);
-    console.log(
-      "Received standardized request:",
-      JSON.stringify(data, null, 2)
+    logger.info(`Processing /process request ID: ${incomingRequestId}`);
+    logger.info(
+      "Received standardized request",
+      { data }
     );
 
     // Log the request *before* authentication check
@@ -481,7 +466,7 @@ async function handleProcessRequest(
     const expectedInternalKey = env.INTERNAL_KEY_BINDING;
 
     if (!expectedInternalKey) {
-      console.error(
+      logger.error(
         "INTERNAL_KEY_BINDING binding not configured or accessible."
       );
       const response = createJsonResponse(
@@ -493,7 +478,7 @@ async function handleProcessRequest(
     }
 
     if (!internalAuthKey || internalAuthKey !== expectedInternalKey) {
-      console.warn(
+      logger.warn(
         `Authentication failed for request ID: ${incomingRequestId}`
       );
       const response = createJsonResponse(
@@ -514,8 +499,8 @@ async function handleProcessRequest(
       return response;
     }
 
-    const validation = validateTradePayload(payload);
-    if (!validation.isValid) {
+    const validation = validateJson(WebhookPayloadSchema, payload);
+    if (!validation.ok) {
       const response = createJsonResponse(
         { success: false, error: validation.error },
         400
@@ -524,9 +509,12 @@ async function handleProcessRequest(
       return response;
     }
 
+    // *** Use validated payload ***
+    const validatedPayload = validation.value;
+
     // *** Call executeTrade ***
     const tradeResult = await executeTrade(
-      payload,
+      validatedPayload,
       env,
       dbLogger,
       startTime,
@@ -540,7 +528,7 @@ async function handleProcessRequest(
     // Queue R2 report save (if trade was successful)
     await queueReportSave(
       tradeResult,
-      payload,
+      validatedPayload,
       dbLogId,
       env,
       ctx,
@@ -549,19 +537,19 @@ async function handleProcessRequest(
 
     // Track API call analytics (non-blocking)
     const processLatencyMs = Date.now() - startTime;
-    trackAnalytics(env, "/track/api-call", {
+    ctx.waitUntil(trackAnalytics(env, "/track/api-call", {
       worker: "trade-worker",
       endpoint: "/process",
       latencyMs: processLatencyMs,
       success: tradeResult.success,
-    });
+    }));
 
     return tradeResponse;
   } catch (error: unknown) {
     const errorMsg = toError(error, "Failed to process request");
-    console.error(
-      `Error in handleProcessRequest for ID ${incomingRequestId}:`,
-      errorMsg
+    logger.error(
+      `Error in handleProcessRequest for ID ${incomingRequestId}`,
+      { error: errorMsg }
     );
     const response = createJsonResponse(
       {
@@ -574,15 +562,18 @@ async function handleProcessRequest(
     if (dbLogId !== null) {
       await dbLogger.logResponse(dbLogId, response, error, startTime);
     } else {
-      // Attempt to log the raw request if logging failed earlier
+      // Body already consumed by request.json() above, log URL and method instead
       try {
-        const rawBody = await request.clone().text();
-        dbLogId = await dbLogger.logRequest(request, rawBody); // Log raw body
+        logger.error("Failed to capture request body after error", {
+          url: request.url,
+          method: request.method,
+        });
+        dbLogId = await dbLogger.logRequest(request, `[body consumed] ${request.url}`);
         await dbLogger.logResponse(dbLogId, response, error, startTime);
       } catch (logError) {
-        console.error(
-          "Failed to log error response after initial failure:",
-          logError
+        logger.error(
+          "Failed to log error response after initial failure",
+          { error: toError(logError) }
         );
       }
     }

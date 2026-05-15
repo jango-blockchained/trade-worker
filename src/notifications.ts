@@ -1,6 +1,7 @@
 import type { Fetcher } from "@cloudflare/workers-types";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
+import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
 
 const logger = createLogger({
   service: "trade-worker",
@@ -48,23 +49,12 @@ export async function sendTradeNotificationToTelegram(
       : `Trade execution failed on ${routedExchange}: ${action} ${quantity} ${symbol}. Error: ${result?.error || "Unknown error"}`;
 
     const telegramPayload = { message: notificationMessage };
-    const telegramWorkerRequest = new Request("https://internal/webhook", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(telegramPayload),
-    });
-
-    if (env.TELEGRAM_INTERNAL_KEY_BINDING) {
-      telegramWorkerRequest.headers.set(
-        "X-Internal-Auth-Key",
-        env.TELEGRAM_INTERNAL_KEY_BINDING
-      );
-    }
-
     logger.info("Calling TELEGRAM_SERVICE for notification", { dbLogId });
-    const notificationResponse = await env.TELEGRAM_SERVICE.fetch(
-      telegramWorkerRequest as unknown as Request
-    );
+    const headers: Record<string, string> = {};
+    if (env.TELEGRAM_INTERNAL_KEY_BINDING) {
+      headers["X-Internal-Auth-Key"] = env.TELEGRAM_INTERNAL_KEY_BINDING;
+    }
+    const notificationResponse = await serviceFetch(env.TELEGRAM_SERVICE, "/webhook", telegramPayload, { headers });
 
     if (!notificationResponse.ok) {
       logger.error("Error calling TELEGRAM_SERVICE for notification", {

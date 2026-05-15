@@ -3,6 +3,7 @@
 
 import type { KVNamespace } from "@cloudflare/workers-types";
 import type { Fetcher } from "@cloudflare/workers-types";
+import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
 import {
   createJsonResponse,
   toError,
@@ -124,20 +125,8 @@ export async function updateD1TradeRecords(
     };
 
     await Promise.all([
-      env.D1_SERVICE.fetch(
-        new Request("http://localhost/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(tradePayload),
-        }) as unknown as Request
-      ),
-      env.D1_SERVICE.fetch(
-        new Request("http://localhost/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(posPayload),
-        }) as unknown as Request
-      ),
+      serviceFetch(env.D1_SERVICE, "/query", tradePayload),
+      serviceFetch(env.D1_SERVICE, "/query", posPayload),
     ]);
   } catch (error: unknown) {
     logger.error("Failed to update D1 trades and positions tables", {

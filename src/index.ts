@@ -23,6 +23,7 @@ import {
   createLogger,
   withRequestLog,
   validateJson,
+  requireInternalAuth,
 } from "@jango-blockchained/hoox-shared/middleware";
 import { createRouter } from "@jango-blockchained/hoox-shared/router";
 import {
@@ -329,31 +330,13 @@ async function handleWebhookRequest(
     dbLogId = await dbLogger.logRequest(request, payload);
 
     // Internal authentication check
-    const internalAuthKey = request.headers.get("X-Internal-Auth-Key");
-    const expectedInternalKey = env.INTERNAL_KEY_BINDING;
-
-    if (!expectedInternalKey) {
-      logger.error(
-        "INTERNAL_KEY_BINDING not configured for /webhook endpoint."
-      );
-      const response = createJsonResponse(
-        { success: false, error: "Service configuration error" },
-        500
-      );
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
-      return response;
-    }
-
-    if (!internalAuthKey || internalAuthKey !== expectedInternalKey) {
+    const authError = requireInternalAuth(request, env, "INTERNAL_KEY_BINDING");
+    if (authError) {
       logger.warn(
         `Authentication failed for webhook request ID: ${incomingRequestId}`
       );
-      const response = createJsonResponse(
-        { success: false, error: "Unauthorized" },
-        403
-      );
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
-      return response;
+      await dbLogger.logResponse(dbLogId, authError, null, startTime);
+      return authError;
     }
 
     const validation = validateJson(WebhookPayloadSchema, payload);
@@ -456,40 +439,23 @@ async function handleProcessRequest(
   let incomingRequestId: string | undefined;
 
   try {
-    const data: TradeProcessRequestBody = await request.json();
+    // Internal authentication check (before body parsing)
+    const bodyPromise = request.json() as Promise<TradeProcessRequestBody>;
+
+    const authError = requireInternalAuth(request, env, "INTERNAL_KEY_BINDING");
+    if (authError) {
+      logger.warn(`Authentication failed for request`);
+      return authError;
+    }
+
+    const data: TradeProcessRequestBody = await bodyPromise;
     incomingRequestId = data?.requestId;
-    const internalAuthKey = data?.internalAuthKey;
 
     logger.info(`Processing /process request ID: ${incomingRequestId}`);
     logger.info("Received standardized request", { data });
 
-    // Log the request *before* authentication check
-    // Pass the full original body data for logging
+    // Log the request
     dbLogId = await dbLogger.logRequest(request, data);
-
-    const expectedInternalKey = env.INTERNAL_KEY_BINDING;
-
-    if (!expectedInternalKey) {
-      logger.error(
-        "INTERNAL_KEY_BINDING binding not configured or accessible."
-      );
-      const response = createJsonResponse(
-        { success: false, error: "Service configuration error" },
-        500
-      );
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
-      return response;
-    }
-
-    if (!internalAuthKey || internalAuthKey !== expectedInternalKey) {
-      logger.warn(`Authentication failed for request ID: ${incomingRequestId}`);
-      const response = createJsonResponse(
-        { success: false, error: "Authentication failed" },
-        403
-      );
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
-      return response;
-    }
 
     const payload = data?.payload;
     if (!payload) {

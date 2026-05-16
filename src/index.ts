@@ -14,7 +14,6 @@ import type {
 import type { Ai } from "@cloudflare/ai";
 import type { ExecutionContext } from "@cloudflare/workers-types";
 import {
-  createErrorResponse,
   Errors,
   createJsonResponse,
   toError,
@@ -341,10 +340,7 @@ async function handleWebhookRequest(
 
     const validation = validateJson(WebhookPayloadSchema, payload);
     if (!validation.ok) {
-      const response = createJsonResponse(
-        { success: false, error: validation.error },
-        400
-      );
+      const response = Errors.badRequest(validation.error);
       await dbLogger.logResponse(dbLogId, response, null, startTime);
       return response;
     }
@@ -392,13 +388,7 @@ async function handleWebhookRequest(
     logger.error(`Error in handleWebhookRequest for ID ${incomingRequestId}`, {
       error: errorMsg,
     });
-    const response = createJsonResponse(
-      {
-        success: false,
-        error: errorMsg,
-      },
-      500
-    );
+    const response = Errors.internal(errorMsg);
     // Log error response if dbLogId was obtained
     if (dbLogId !== null) {
       await dbLogger.logResponse(dbLogId, response, error, startTime);
@@ -459,20 +449,14 @@ async function handleProcessRequest(
 
     const payload = data?.payload;
     if (!payload) {
-      const response = createJsonResponse(
-        { success: false, error: "Missing payload in request" },
-        400
-      );
+      const response = Errors.badRequest("Missing payload in request");
       await dbLogger.logResponse(dbLogId, response, null, startTime);
       return response;
     }
 
     const validation = validateJson(WebhookPayloadSchema, payload);
     if (!validation.ok) {
-      const response = createJsonResponse(
-        { success: false, error: validation.error },
-        400
-      );
+      const response = Errors.badRequest(validation.error);
       await dbLogger.logResponse(dbLogId, response, null, startTime);
       return response;
     }
@@ -520,13 +504,7 @@ async function handleProcessRequest(
     logger.error(`Error in handleProcessRequest for ID ${incomingRequestId}`, {
       error: errorMsg,
     });
-    const response = createJsonResponse(
-      {
-        success: false,
-        error: errorMsg,
-      },
-      500
-    );
+    const response = Errors.internal(errorMsg);
     // Log error response if dbLogId was obtained
     if (dbLogId !== null) {
       await dbLogger.logResponse(dbLogId, response, error, startTime);

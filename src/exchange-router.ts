@@ -1,8 +1,14 @@
 import { MexcClient } from "./mexc-client";
 import { BinanceClient } from "./binance-client";
 import { BybitClient } from "./bybit-client";
-import type { Env, IExchangeClient } from "./index";
+import type { Env } from "./index";
+import type { IExchangeClient } from "./execution";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
+import type {
+  IExchangeProvider,
+  ExchangeRouter as IExchangeRouter,
+} from "@jango-blockchained/hoox-shared/exchange-client";
+import { ExchangeRouter as BaseRouter } from "@jango-blockchained/hoox-shared/exchange-client";
 import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
@@ -12,14 +18,14 @@ const logger = createLogger({
   module: "exchange-router",
 });
 
-export interface IExchangeProvider {
-  name: string;
-  createClient(env: Env): IExchangeClient;
-  hasCredentials(env: Env): boolean;
-}
+// Re-export generic IExchangeProvider for backward compat
+export type { IExchangeProvider };
 
-export class BinanceProvider implements IExchangeProvider {
-  name = "binance";
+// Provider type alias bound to trade-worker's types
+type TradeExchangeProvider = IExchangeProvider<IExchangeClient, Env>;
+
+export class BinanceProvider implements TradeExchangeProvider {
+  readonly name = "binance";
   createClient(env: Env): IExchangeClient {
     const apiKey = env.BINANCE_KEY_BINDING;
     const apiSecret = env.BINANCE_SECRET_BINDING;
@@ -33,8 +39,8 @@ export class BinanceProvider implements IExchangeProvider {
   }
 }
 
-export class MexcProvider implements IExchangeProvider {
-  name = "mexc";
+export class MexcProvider implements TradeExchangeProvider {
+  readonly name = "mexc";
   createClient(env: Env): IExchangeClient {
     const apiKey = env.MEXC_KEY_BINDING;
     const apiSecret = env.MEXC_SECRET_BINDING;
@@ -47,8 +53,8 @@ export class MexcProvider implements IExchangeProvider {
   }
 }
 
-export class BybitProvider implements IExchangeProvider {
-  name = "bybit";
+export class BybitProvider implements TradeExchangeProvider {
+  readonly name = "bybit";
   createClient(env: Env): IExchangeClient {
     const apiKey = env.BYBIT_KEY_BINDING;
     const apiSecret = env.BYBIT_SECRET_BINDING;
@@ -62,17 +68,24 @@ export class BybitProvider implements IExchangeProvider {
   }
 }
 
-export class ExchangeRouter {
-  providers = new Map<string, IExchangeProvider>();
+/**
+ * Trade-worker-specific ExchangeRouter.
+ * Composes the shared generic router and adds KV-based dynamic exchange routing.
+ */
+export class ExchangeRouter implements Pick<
+  IExchangeRouter<IExchangeClient, Env>,
+  "registerProvider" | "route"
+> {
+  private readonly baseRouter = new BaseRouter<IExchangeClient, Env>();
 
   constructor() {
-    this.registerProvider(new BinanceProvider());
-    this.registerProvider(new MexcProvider());
-    this.registerProvider(new BybitProvider());
+    this.baseRouter.registerProvider(new BinanceProvider());
+    this.baseRouter.registerProvider(new MexcProvider());
+    this.baseRouter.registerProvider(new BybitProvider());
   }
 
-  registerProvider(provider: IExchangeProvider) {
-    this.providers.set(provider.name.toLowerCase(), provider);
+  registerProvider(provider: IExchangeProvider<IExchangeClient, Env>): void {
+    this.baseRouter.registerProvider(provider);
   }
 
   async route(
@@ -104,17 +117,6 @@ export class ExchangeRouter {
       }
     }
 
-    const provider = this.providers.get(exchange);
-    if (!provider) {
-      throw new Error(`Unsupported exchange: ${exchange}`);
-    }
-
-    if (!provider.hasCredentials(env)) {
-      throw new Error(
-        `API secret bindings not configured or accessible for ${exchange}`
-      );
-    }
-
-    return { exchange, client: provider.createClient(env) };
+    return this.baseRouter.route(exchange, env);
   }
 }

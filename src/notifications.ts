@@ -54,7 +54,12 @@ export async function sendTradeNotificationToTelegram(
     if (env.TELEGRAM_INTERNAL_KEY_BINDING) {
       headers["X-Internal-Auth-Key"] = env.TELEGRAM_INTERNAL_KEY_BINDING;
     }
-    const notificationResponse = await serviceFetch(env.TELEGRAM_SERVICE, "/webhook", telegramPayload, { headers });
+    const notificationResponse = await serviceFetch(
+      env.TELEGRAM_SERVICE,
+      "/webhook",
+      telegramPayload,
+      { headers }
+    );
 
     if (!notificationResponse.ok) {
       logger.error("Error calling TELEGRAM_SERVICE for notification", {

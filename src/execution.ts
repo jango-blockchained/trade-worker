@@ -301,7 +301,7 @@ export async function executeTrade(
     const router = new ExchangeRouter();
 
     let client: IExchangeClient;
-    let routedExchange = exchange;
+    let routedExchange: string;
 
     try {
       const routeResult = await router.route(payload, env);

@@ -8,7 +8,7 @@ Executes trades on Binance, Bybit, and MEXC — routes signals to the configured
 
 Use this worker indirectly when you run `hoox` commands:
 
-- `hoox secrets update-cf BINANCE_API_KEY trade-worker` — set exchange API keys
+- `hoox secrets update-cf BINANCE_KEY_BINDING trade-worker` — set exchange API keys
 - `hoox deploy worker trade-worker` — deploy the trade worker
 
 → [Monitor Trading](../../docs/guides/monitor-trading.md) · [CLI Reference](../../docs/reference/cli-commands.md)

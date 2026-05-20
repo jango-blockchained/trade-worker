@@ -34,7 +34,7 @@ export interface NotificationsEnv {
  */
 export async function sendTradeNotificationToTelegram(
   env: NotificationsEnv,
-  result: any,
+  result: { success?: boolean; result?: unknown; error?: string },
   routedExchange: string,
   action: string,
   quantity: number,

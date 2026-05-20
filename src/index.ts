@@ -5,12 +5,7 @@ import { DbLogger } from "./db-logger";
 import type { KVNamespace } from "@cloudflare/workers-types";
 import type { R2Bucket } from "@cloudflare/workers-types";
 import type { D1Database } from "@cloudflare/workers-types";
-import type {
-  Queue,
-  QueueEvent,
-  MessageSendRequest,
-  Fetcher,
-} from "@cloudflare/workers-types";
+import type { Fetcher } from "@cloudflare/workers-types";
 import type { Ai } from "@cloudflare/ai";
 import type { ExecutionContext } from "@cloudflare/workers-types";
 import {
@@ -31,7 +26,6 @@ import {
   ProcessRequestBody,
 } from "@jango-blockchained/hoox-shared/types";
 import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
-import type { AnalyticsEnv } from "@jango-blockchained/hoox-shared/analytics";
 import { healthCheck } from "@jango-blockchained/hoox-shared/health";
 import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 import {
@@ -57,17 +51,7 @@ import {
 
 // --- Type Definitions ---
 
-export interface Env extends Cloudflare.Env, AnalyticsEnv {
-  // Optional Mocks for Testing
-  __mocks__?: {
-    MexcClient?: typeof MexcClient; // Constructor type
-    BinanceClient?: typeof BinanceClient;
-    BybitClient?: typeof BybitClient;
-    DbLogger?: typeof DbLogger;
-  };
-
-  ENABLE_DEBUG_ENDPOINTS?: string;
-}
+export interface Env extends Cloudflare.Env, ExecutionEnv {}
 
 // Payload structure for legacy /process requests
 type TradeProcessRequestBody = ProcessRequestBody<WebhookPayload>;
@@ -163,16 +147,14 @@ async function queueReportSave(
   requestId: string | undefined
 ): Promise<void> {
   if (tradeResult.success) {
-    try {
-      logger.info(
-        `[${requestId}] Trade successful, queueing report save to R2.`
-      );
-      ctx.waitUntil(saveReportToR2(tradeResult.result, payload, dbLogId, env));
-    } catch (e) {
-      logger.error(`[${requestId}] Failed to queue R2 report save`, {
-        error: toError(e),
-      });
-    }
+    logger.info(`[${requestId}] Trade successful, queueing report save to R2.`);
+    ctx.waitUntil(
+      saveReportToR2(tradeResult.result, payload, dbLogId, env).catch((e) => {
+        logger.error(`[${requestId}] Report save failed`, {
+          error: toError(e),
+        });
+      })
+    );
   }
 }
 
@@ -230,22 +212,20 @@ export default {
   ),
 
   async queue(
-    messages: QueueEvent<TradeQueueMessage>[],
+    batch: MessageBatch<TradeQueueMessage>,
     env: Env,
     ctx: ExecutionContext
   ): Promise<void> {
-    logger.info(`[Queue] Received ${messages.length} message(s)`);
+    logger.info(`[Queue] Received ${batch.messages.length} message(s)`);
 
-    for (const msg of messages) {
-      // TODO: fix queue handler signature — QueueEvent wraps Message<Body>, needs batch.messages iteration
-      const trade = (msg as unknown as { body: TradeQueueMessage }).body;
+    for (const msg of batch.messages) {
+      const trade = msg.body;
       logger.info(
         `[Queue] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`
       );
 
       // Get retry count from message metadata
-      const retryCount =
-        (msg as { retry?: { count: number } }).retry?.count || 0;
+      const retryCount = msg.attempts || 0;
 
       try {
         // Execute the trade
@@ -274,14 +254,7 @@ export default {
           );
 
           // Re-queue with delay using the message's retry mechanism
-          // TODO: fix queue handler signature — retry is on Message<Body>, not QueueEvent
-          (
-            msg as unknown as {
-              retry?: (opts: { delaySeconds: number }) => void;
-            }
-          ).retry?.({
-            delaySeconds,
-          });
+          msg.retry({ delaySeconds });
         } else {
           logger.error(
             `[Queue] Max retries exceeded for ${trade.requestId}, moving to DLQ`
@@ -327,6 +300,12 @@ async function handleWebhookRequest(
     // Assuming logRequest can handle the payload directly and returns a number ID
     // Might need adjustment based on DbLogger implementation
     dbLogId = await dbLogger.logRequest(request, payload);
+
+    if (!env.INTERNAL_KEY_BINDING) {
+      const response = Errors.internal("Service configuration error");
+      await dbLogger.logResponse(dbLogId, response, null, startTime);
+      return response;
+    }
 
     // Internal authentication check
     const authError = requireInternalAuth(request, env, "INTERNAL_KEY_BINDING");
@@ -431,6 +410,10 @@ async function handleProcessRequest(
   try {
     // Internal authentication check (before body parsing)
     const bodyPromise = request.json() as Promise<TradeProcessRequestBody>;
+
+    if (!env.INTERNAL_KEY_BINDING) {
+      return Errors.internal("Service configuration error");
+    }
 
     const authError = requireInternalAuth(request, env, "INTERNAL_KEY_BINDING");
     if (authError) {

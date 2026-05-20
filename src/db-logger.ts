@@ -39,7 +39,7 @@ interface LoggerEnv {
 
 // Interface defining the DbLogger's capabilities (optional but good practice)
 export interface IDbLogger {
-  logRequest(request: Request, requestBody: any): Promise<string | null>;
+  logRequest(request: Request, requestBody: unknown): Promise<string | null>;
   logResponse(
     requestId: string | null,
     response: Response,
@@ -81,7 +81,7 @@ export class DbLogger implements IDbLogger {
    * @param requestBody The parsed body of the request (can be any type).
    * @returns The ID of the inserted request log record, or null if disabled/failed.
    */
-  async logRequest(request: Request, requestBody: any): Promise<string | null> {
+  async logRequest(request: Request, requestBody: unknown): Promise<string | null> {
     if (!this.enabled || !this.env.SYSTEM_LOGS_BUCKET) return null;
 
     try {

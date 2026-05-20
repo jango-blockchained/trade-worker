@@ -48,6 +48,7 @@ export class BinanceClient implements IBinanceClient {
   private readonly apiKey: string;
   private readonly apiSecret: string;
   private readonly baseUrl: string = "https://fapi.binance.com"; // Futures API
+  private readonly importedKeyPromise: Promise<CryptoKey>;
 
   private logger = createLogger({
     service: "trade-worker",
@@ -60,6 +61,16 @@ export class BinanceClient implements IBinanceClient {
     }
     this.apiKey = apiKey;
     this.apiSecret = apiSecret;
+
+    // Pre-import the HMAC key to avoid expensive importKey on every request
+    const encoder = new TextEncoder();
+    this.importedKeyPromise = crypto.subtle.importKey(
+      "raw",
+      encoder.encode(apiSecret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
   }
 
   /**
@@ -74,16 +85,9 @@ export class BinanceClient implements IBinanceClient {
     ).toString();
 
     const encoder = new TextEncoder();
-    const key = encoder.encode(this.apiSecret);
     const message = encoder.encode(queryString);
 
-    const importedKey = await crypto.subtle.importKey(
-      "raw",
-      key,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
+    const importedKey = await this.importedKeyPromise;
     const signatureBuffer = await crypto.subtle.sign(
       "HMAC",
       importedKey,

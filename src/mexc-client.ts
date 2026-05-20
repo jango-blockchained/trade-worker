@@ -14,7 +14,7 @@ interface MexcSuccessResponse<T> {
 interface MexcErrorResponse {
   code: number;
   msg: string;
-  data?: any;
+  data?: unknown;
 }
 
 type MexcApiResponse<T> = MexcSuccessResponse<T> | MexcErrorResponse;

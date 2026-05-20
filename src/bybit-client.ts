@@ -18,7 +18,7 @@ interface BybitSuccessResponse<T> extends BybitBaseResponse {
 
 interface BybitErrorResponse extends BybitBaseResponse {
   retCode: Exclude<number, 0>; // Any number other than 0
-  result?: any; // Sometimes result might exist even on error
+  result?: unknown; // Sometimes result might exist even on error
 }
 
 type BybitApiResponse<T> = BybitSuccessResponse<T> | BybitErrorResponse;
@@ -60,6 +60,7 @@ export class BybitClient implements IBybitClient {
   private readonly apiSecret: string;
   private readonly baseUrl: string = "https://api.bybit.com";
   private readonly recvWindow: number = 5000; // Bybit specific recv_window
+  private readonly importedKeyPromise: Promise<CryptoKey>;
   private readonly logger: Logger;
 
   constructor(apiKey: string, apiSecret: string) {
@@ -72,6 +73,16 @@ export class BybitClient implements IBybitClient {
       service: "trade-worker",
       module: "bybit-client",
     });
+
+    // Pre-import the HMAC key to avoid expensive importKey on every request
+    const encoder = new TextEncoder();
+    this.importedKeyPromise = crypto.subtle.importKey(
+      "raw",
+      encoder.encode(apiSecret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
   }
 
   /**
@@ -85,16 +96,9 @@ export class BybitClient implements IBybitClient {
     const signaturePayload = `${timestamp}${this.apiKey}${this.recvWindow}${paramsStr}`;
 
     const encoder = new TextEncoder();
-    const key = encoder.encode(this.apiSecret);
     const message = encoder.encode(signaturePayload);
 
-    const importedKey = await crypto.subtle.importKey(
-      "raw",
-      key,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
+    const importedKey = await this.importedKeyPromise;
     const signatureBuffer = await crypto.subtle.sign(
       "HMAC",
       importedKey,
@@ -110,7 +114,7 @@ export class BybitClient implements IBybitClient {
   private async makeRequest<T>(
     method: string,
     path: string,
-    params: Record<string, any> = {}
+    params: Record<string, unknown> = {}
   ): Promise<T> {
     const timestamp = Date.now();
     let paramsStr = "";
@@ -119,7 +123,7 @@ export class BybitClient implements IBybitClient {
     if (method === "GET" || method === "DELETE") {
       if (Object.keys(params).length > 0) {
         // Sort GET params alphabetically for signature
-        const sortedParams: Record<string, any> = {};
+        const sortedParams: Record<string, unknown> = {};
         Object.keys(params)
           .sort()
           .forEach((key) => (sortedParams[key] = params[key]));
@@ -190,7 +194,7 @@ export class BybitClient implements IBybitClient {
     reduceOnly?: boolean;
   }): Promise<any> {
     const path = "/v5/order/create";
-    const apiParams: Record<string, any> = {
+    const apiParams: Record<string, unknown> = {
       category: "linear",
       symbol: params.symbol,
       side:

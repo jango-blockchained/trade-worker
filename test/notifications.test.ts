@@ -51,11 +51,12 @@ describe("sendTradeNotificationToTelegram", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const call = mockFetch.mock.calls[0] as any;
-    const request = call[0] as Request;
-    expect(request.method).toBe("POST");
-    expect(request.headers.get("Content-Type")).toBe("application/json");
+    const url = call[0] as string;
+    const init = call[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect((init.headers as any)["Content-Type"]).toBe("application/json");
 
-    const body = JSON.parse(await request.text());
+    const body = JSON.parse(init.body as string);
     expect(body.message).toContain("Trade executed successfully");
     expect(body.message).toContain("mexc");
     expect(body.message).toContain("LONG");
@@ -79,8 +80,8 @@ describe("sendTradeNotificationToTelegram", () => {
 
     expect(mockFetch).toHaveBeenCalled();
     const call = mockFetch.mock.calls[mockFetch.mock.calls.length - 1] as any;
-    const request = call[0] as Request;
-    const body = JSON.parse(await request.text());
+    const init = call[1] as RequestInit;
+    const body = JSON.parse(init.body as string);
     expect(body.message).toContain("Trade execution failed");
     expect(body.message).toContain("Insufficient balance");
   });
@@ -101,8 +102,9 @@ describe("sendTradeNotificationToTelegram", () => {
     );
 
     const call = mockFetch.mock.calls[mockFetch.mock.calls.length - 1] as any;
-    const request = call[0] as Request;
-    expect(request.headers.get("X-Internal-Auth-Key")).toBe("secret-key-123");
+    const init = call[1] as RequestInit;
+    expect(init.headers).toBeDefined();
+    expect((init.headers as Record<string, string>)["X-Internal-Auth-Key"]).toBe("secret-key-123");
   });
 
   test("handles TELEGRAM_SERVICE non-ok response gracefully", async () => {

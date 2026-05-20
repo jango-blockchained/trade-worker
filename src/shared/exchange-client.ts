@@ -65,6 +65,11 @@ export async function hmacSign(secret: string, data: string): Promise<string> {
   return bufferToHex(signatureBuffer);
 }
 
+/**
+ * Base class for future exchange clients to extend.
+ * Currently, the active exchange clients (Binance, Bybit, MEXC) are implemented
+ * as standalone classes, but new integrations should extend this base class.
+ */
 export abstract class BaseExchangeClient {
   protected readonly apiKey: string;
   protected readonly apiSecret: string;

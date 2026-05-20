@@ -1,4 +1,4 @@
-import type { D1Database, D1Result } from "@cloudflare/workers-types";
+import type { D1Result, Fetcher } from "@cloudflare/workers-types";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import {
   createErrorResponse,
@@ -15,7 +15,8 @@ const logger = createLogger({ service: "trade-worker", module: "signals" });
  * Only includes the bindings needed by these functions.
  */
 export interface D1Env {
-  DB: D1Database;
+  D1_SERVICE: Fetcher;
+  INTERNAL_KEY_BINDING?: string;
   [key: string]: unknown;
 }
 
@@ -38,23 +39,45 @@ export async function insertSignal(
   signal: TradeSignalRecord,
   env: D1Env
 ): Promise<D1Result> {
-  if (!env.DB) {
-    throw new Error("D1 Database (DB) binding not configured.");
+  if (!env.D1_SERVICE) {
+    throw new Error("D1_SERVICE binding not configured.");
   }
-  const stmt = env.DB.prepare(
-    `INSERT INTO trade_signals (signal_id, timestamp, symbol, signal_type, source, raw_data) 
-         VALUES (?, ?, ?, ?, ?, ?)`
-  );
-  return await stmt
-    .bind(
-      signal.signal_id,
-      signal.timestamp,
-      signal.symbol,
-      signal.signal_type,
-      signal.source ?? null, // Use null if source is undefined
-      signal.raw_data ?? null // Use null if raw_data is undefined
-    )
-    .run();
+  const query = `INSERT INTO trade_signals (signal_id, timestamp, symbol, signal_type, source, raw_data) 
+         VALUES (?, ?, ?, ?, ?, ?)`;
+  const params = [
+    signal.signal_id,
+    signal.timestamp,
+    signal.symbol,
+    signal.signal_type,
+    signal.source ?? null,
+    signal.raw_data ?? null,
+  ];
+
+  const response = await env.D1_SERVICE.fetch("http://internal/query", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Secret": env.INTERNAL_KEY_BINDING || "",
+    },
+    body: JSON.stringify({ query, params }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`D1_SERVICE responded with ${response.status}`);
+  }
+
+  const data = (await response.json()) as { success: boolean; error?: string; changes?: number; lastRowId?: number };
+  if (!data.success) {
+    return {
+      success: false,
+      error: data.error || "D1 insert failed",
+    } as unknown as D1Result;
+  }
+
+  return {
+    success: true,
+    meta: { changes: data.changes, last_row_id: data.lastRowId },
+  } as unknown as D1Result;
 }
 
 /**
@@ -64,16 +87,36 @@ export async function getRecentSignals(
   env: D1Env,
   limit: number = 10
 ): Promise<D1Result<TradeSignalRecord>> {
-  if (!env.DB) {
-    throw new Error("D1 Database (DB) binding not configured.");
+  if (!env.D1_SERVICE) {
+    throw new Error("D1_SERVICE binding not configured.");
   }
-  const stmt = env.DB.prepare(
-    `SELECT signal_id, timestamp, symbol, signal_type, source, processed_at 
+  const query = `SELECT signal_id, timestamp, symbol, signal_type, source, processed_at 
          FROM trade_signals 
          ORDER BY processed_at DESC 
-         LIMIT ?`
-  );
-  return await stmt.bind(limit).all<TradeSignalRecord>();
+         LIMIT ?`;
+
+  const response = await env.D1_SERVICE.fetch("http://internal/query", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Secret": env.INTERNAL_KEY_BINDING || "",
+    },
+    body: JSON.stringify({ query, params: [limit] }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`D1_SERVICE responded with ${response.status}`);
+  }
+
+  const data = (await response.json()) as { success: boolean; error?: string; results?: unknown[] };
+  if (!data.success) {
+    throw new Error(data.error || "D1 getRecentSignals failed");
+  }
+
+  return {
+    success: true,
+    results: data.results,
+  } as unknown as D1Result<TradeSignalRecord>;
 }
 
 // --- Request Handlers for D1 ---
@@ -85,7 +128,7 @@ export async function handlePostSignalRequest(
   request: Request,
   env: D1Env
 ): Promise<Response> {
-  let signalPayload: any;
+  let signalPayload: unknown;
   try {
     signalPayload = await request.json();
   } catch (error: unknown) {

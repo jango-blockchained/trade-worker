@@ -40,10 +40,10 @@ export interface ExecutionEnv extends AnalyticsEnv {
   BYBIT_KEY_BINDING?: string;
   BYBIT_SECRET_BINDING?: string;
   __mocks__?: {
-    MexcClient?: any;
-    BinanceClient?: any;
-    BybitClient?: any;
-    DbLogger?: any;
+    MexcClient?: unknown;
+    BinanceClient?: unknown;
+    BybitClient?: unknown;
+    DbLogger?: unknown;
   };
 }
 
@@ -79,7 +79,7 @@ interface ValidationResult {
  */
 export async function updateD1TradeRecords(
   env: ExecutionEnv,
-  result: any,
+  result: unknown,
   payload: WebhookPayload,
   routedExchange: string,
   overriddenLeverage: number | undefined
@@ -164,8 +164,8 @@ export function validateApiCredentials(
 /**
  * Validates the core trade payload structure and content.
  */
-export function validateTradePayload(payload: any): ValidationResult {
-  // Use any initially, then refine
+export function validateTradePayload(payload: unknown): ValidationResult {
+  // Use unknown initially, then refine
   if (!payload || typeof payload !== "object") {
     return { isValid: false, error: "Invalid or missing payload" };
   }
@@ -335,7 +335,7 @@ export async function executeTrade(
       }
     }
 
-    let result: any;
+    let result: unknown;
     switch (action.toUpperCase()) {
       case "LONG":
         result = await client.openLong(symbol, quantity, price, orderType);

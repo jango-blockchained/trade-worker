@@ -22,7 +22,7 @@ export interface ReportsEnv {
  * Task 3.5 & 3.6
  */
 export async function saveReportToR2(
-  reportData: any, // The trade result or formatted report data
+  reportData: unknown, // The trade result or formatted report data
   payload: WebhookPayload,
   dbLogId: string | null, // Changed to string
   env: ReportsEnv
@@ -108,12 +108,12 @@ export async function handleGetReportRequest(
     logger.info("Successfully retrieved R2 object", { key, size: object.size });
 
     // Prepare headers for the response
-    const headers = new Headers() as any;
-    object.writeHttpMetadata(headers);
+    const headers = new Headers();
+    object.writeHttpMetadata(headers as unknown as Headers);
     headers.set("etag", object.httpEtag);
 
     // Stream the body back
-    return new Response(object.body as any, {
+    return new Response(object.body as unknown as BodyInit, {
       headers,
     });
   } catch (error: unknown) {

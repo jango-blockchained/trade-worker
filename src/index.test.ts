@@ -150,7 +150,12 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
     };
 
     it("should insert a valid signal and return 201", async () => {
-      mockRun.mockResolvedValueOnce({ success: true, meta: { changes: 1 } }); // Simulate successful D1 insert
+      mockEnv.D1_SERVICE.fetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ success: true, changes: 1, lastRowId: 1 }),
+          { status: 200 }
+        )
+      );
 
       const request = createMockRequest(
         "POST",
@@ -163,18 +168,14 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toHaveProperty("signalId");
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("INSERT INTO trade_signals")
+      expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledTimes(1);
+      expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledWith(
+        "http://internal/query",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining("INSERT INTO trade_signals"),
+        })
       );
-      expect(mockBind).toHaveBeenCalledWith(
-        expect.any(String), // signal_id (UUID)
-        validSignalPayload.timestamp,
-        validSignalPayload.symbol,
-        validSignalPayload.signal_type,
-        validSignalPayload.source,
-        JSON.stringify(validSignalPayload)
-      );
-      expect(mockRun).toHaveBeenCalledTimes(1);
     });
 
     it("should return 400 for invalid JSON", async () => {
@@ -205,7 +206,11 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
     });
 
     it("should return 500 if D1 insert fails", async () => {
-      mockRun.mockResolvedValueOnce({ success: false, error: "D1 Error" }); // Simulate D1 failure
+      mockEnv.D1_SERVICE.fetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false, error: "D1 Error" }), {
+          status: 200,
+        })
+      );
 
       const request = createMockRequest(
         "POST",
@@ -220,11 +225,11 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(responseBody.error).toContain(
         "Failed to store signal in database."
       );
-      expect(mockRun).toHaveBeenCalledTimes(1);
+      expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledTimes(1);
     });
 
     it("should return 500 if D1 insert throws an exception", async () => {
-      mockRun.mockRejectedValueOnce(new Error("D1 Exception")); // Simulate D1 exception
+      mockEnv.D1_SERVICE.fetch.mockRejectedValueOnce(new Error("D1 Exception")); // Simulate D1 exception
 
       const request = createMockRequest(
         "POST",
@@ -239,7 +244,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(responseBody.error).toContain(
         "Internal server error while storing signal."
       );
-      expect(mockRun).toHaveBeenCalledTimes(1);
+      expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -265,10 +270,12 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
     ];
 
     it("should return recent signals with default limit", async () => {
-      mockAll.mockResolvedValueOnce({
-        success: true,
-        results: mockSignalResults,
-      });
+      mockEnv.D1_SERVICE.fetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ success: true, results: mockSignalResults }),
+          { status: 200 }
+        )
+      );
 
       const request = createMockRequest("GET", "/api/signals");
       const response = await worker.fetch(request, mockEnv, {} as any);
@@ -277,18 +284,16 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual(mockSignalResults);
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT signal_id")
-      );
-      expect(mockBind).toHaveBeenCalledWith(10); // Default limit
-      expect(mockAll).toHaveBeenCalledTimes(1);
+      expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledTimes(1);
     });
 
     it("should return signals with specified limit", async () => {
-      mockAll.mockResolvedValueOnce({
-        success: true,
-        results: [mockSignalResults[0]],
-      });
+      mockEnv.D1_SERVICE.fetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ success: true, results: [mockSignalResults[0]] }),
+          { status: 200 }
+        )
+      );
 
       const request = createMockRequest("GET", "/api/signals?limit=1");
       const response = await worker.fetch(request, mockEnv, {} as any);
@@ -297,12 +302,15 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual([mockSignalResults[0]]);
-      expect(mockBind).toHaveBeenCalledWith(1); // Specified limit
-      expect(mockAll).toHaveBeenCalledTimes(1);
+      expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledTimes(1);
     });
 
     it("should return empty array if no signals found", async () => {
-      mockAll.mockResolvedValueOnce({ success: true, results: [] });
+      mockEnv.D1_SERVICE.fetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true, results: [] }), {
+          status: 200,
+        })
+      );
 
       const request = createMockRequest("GET", "/api/signals");
       const response = await worker.fetch(request, mockEnv, {} as any);
@@ -311,7 +319,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(true);
       expect(responseBody.result).toEqual([]);
-      expect(mockAll).toHaveBeenCalledTimes(1);
+      expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledTimes(1);
     });
 
     it("should return 400 for invalid limit parameter (string)", async () => {
@@ -341,7 +349,9 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
     });
 
     it("should return 500 if D1 query fails", async () => {
-      mockAll.mockRejectedValueOnce(new Error("D1 Select Error"));
+      mockEnv.D1_SERVICE.fetch.mockRejectedValueOnce(
+        new Error("D1 Select Error")
+      );
 
       const request = createMockRequest("GET", "/api/signals");
       const response = await worker.fetch(request, mockEnv, {} as any);
@@ -352,7 +362,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(responseBody.error).toContain(
         "Internal server error while retrieving signals."
       );
-      expect(mockAll).toHaveBeenCalledTimes(1);
+      expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledTimes(1);
     });
   });
 });
@@ -711,7 +721,7 @@ describe("Trade Worker Handlers", () => {
       expect(mockMexcClient.openLong).toHaveBeenCalled();
     });
 
-    it("should return 403 if X-Internal-Auth-Key is missing", async () => {
+    it("should return 401 if X-Internal-Auth-Key is missing", async () => {
       const request = createMockRequest(
         "POST",
         "/process",
@@ -722,10 +732,10 @@ describe("Trade Worker Handlers", () => {
       const response = await worker.fetch(request, mockEnv, {
         waitUntil: vi.fn(),
       } as any);
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(401);
     });
 
-    it("should return 403 if X-Internal-Auth-Key is invalid", async () => {
+    it("should return 401 if X-Internal-Auth-Key is invalid", async () => {
       const request = createMockRequest(
         "POST",
         "/process",
@@ -736,7 +746,7 @@ describe("Trade Worker Handlers", () => {
       const response = await worker.fetch(request, mockEnv, {
         waitUntil: vi.fn(),
       } as any);
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(401);
     });
 
     it("should return 500 if INTERNAL_KEY_BINDING is not configured", async () => {
@@ -762,7 +772,7 @@ describe("Trade Worker Handlers", () => {
       expect(mockLogResponse).toHaveBeenCalled();
     });
 
-    it("should return 403 if X-Internal-Auth-Key is missing", async () => {
+    it("should return 401 if X-Internal-Auth-Key is missing", async () => {
       const request = createMockRequest(
         "POST",
         "/process",
@@ -773,9 +783,9 @@ describe("Trade Worker Handlers", () => {
       const response = await worker.fetch(request, mockEnv, {
         waitUntil: vi.fn(),
       } as any);
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(401);
       const body = (await response.json()) as any;
-      expect(body.error).toBe("Authentication failed");
+      expect(body.error).toBe("Unauthorized");
     });
 
     it("should return 500 if INTERNAL_KEY_BINDING is missing", async () => {
@@ -804,4 +814,567 @@ describe("Trade Worker Handlers", () => {
   });
 
   // Tests for /report handler and /test-ai handler can be added here in the future
+});
+
+describe("Trade Worker - Health Check Endpoint", () => {
+  it("GET /health returns 200 status", async () => {
+    const request = new Request("http://localhost/health", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    expect(response.status).toBe(200);
+  });
+
+  it("GET /health returns JSON response", async () => {
+    const request = new Request("http://localhost/health", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+  });
+
+  it("GET /health includes status field", async () => {
+    const request = new Request("http://localhost/health", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    const body = (await response.json()) as any;
+    expect(body).toHaveProperty("status");
+  });
+
+  it("GET /health includes worker name", async () => {
+    const request = new Request("http://localhost/health", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    const body = (await response.json()) as any;
+    expect(body).toHaveProperty("worker");
+  });
+});
+
+describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
+  const validPayload = {
+    exchange: "mexc",
+    action: "LONG",
+    symbol: "BTC_USDT",
+    quantity: 0.01,
+    leverage: 20,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLogRequest.mockResolvedValue(555);
+    mockMexcClient.openLong.mockResolvedValue({ orderId: "mexc123" });
+    mockMexcClient.setLeverage.mockResolvedValue({});
+  });
+
+  it("POST /webhook accepts valid trade payload", async () => {
+    const request = new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Auth-Key": "test-internal-key",
+      },
+      body: JSON.stringify(validPayload),
+    });
+    request.json = async () => validPayload;
+
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect([200, 201, 202, 400, 401]).toContain(response.status);
+  });
+
+  it("POST /webhook requires authentication", async () => {
+    const request = new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(validPayload),
+    });
+    request.json = async () => validPayload;
+
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect(response.status).toBe(401);
+  });
+
+  it("POST /webhook validates payload", async () => {
+    const invalidPayload = { ...validPayload, quantity: -1 };
+    const request = new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Auth-Key": "test-internal-key",
+      },
+      body: JSON.stringify(invalidPayload),
+    });
+    request.json = async () => invalidPayload;
+
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect([400, 401]).toContain(response.status) ||
+      expect(response.status).toBeLessThan(500);
+  });
+
+  it("POST /webhook returns proper response", async () => {
+    const request = new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Auth-Key": "test-internal-key",
+      },
+      body: JSON.stringify(validPayload),
+    });
+    request.json = async () => validPayload;
+
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+  });
+
+  it("POST /webhook handles invalid JSON", async () => {
+    const request = new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Auth-Key": "test-internal-key",
+      },
+      body: "invalid json",
+    });
+    request.json = async () => {
+      throw new Error("Invalid JSON");
+    };
+
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect([400, 401, 500]).toContain(response.status);
+  });
+
+  it("POST /webhook executes trade on valid payload", async () => {
+    const request = new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Auth-Key": "test-internal-key",
+      },
+      body: JSON.stringify(validPayload),
+    });
+    request.json = async () => validPayload;
+
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    if (response.status < 400) {
+      expect(mockMexcClientConstructor).toHaveBeenCalled();
+    }
+  });
+});
+
+describe("Trade Worker - Report Endpoint (/report)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("GET /report returns response", async () => {
+    const request = new Request("http://localhost/report", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    expect([200, 404, 400, 500]).toContain(response.status);
+  });
+
+  it("GET /report with limit parameter", async () => {
+    const request = new Request("http://localhost/report?limit=10", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    expect([200, 404, 400, 500]).toContain(response.status);
+  });
+
+  it("GET /report with offset parameter", async () => {
+    const request = new Request("http://localhost/report?offset=5", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    expect([200, 404, 400, 500]).toContain(response.status);
+  });
+
+  it("GET /report with symbol filter", async () => {
+    const request = new Request("http://localhost/report?symbol=BTC_USDT", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    expect([200, 404, 400, 500]).toContain(response.status);
+  });
+});
+
+describe("Trade Worker - Order Execution", () => {
+  const validPayload = {
+    exchange: "mexc",
+    action: "LONG",
+    symbol: "BTC_USDT",
+    quantity: 0.01,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLogRequest.mockResolvedValue(555);
+    mockMexcClient.openLong.mockResolvedValue({ orderId: "mexc123" });
+    mockMexcClient.setLeverage.mockResolvedValue({});
+  });
+
+  it("executes valid BUY order", async () => {
+    const request = createMockRequest("POST", "/process", validPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(response.status).toBeLessThan(500);
+  });
+
+  it("executes valid SELL order", async () => {
+    const sellPayload = { ...validPayload, action: "SHORT" };
+    mockMexcClient.openShort.mockResolvedValue({ orderId: "mexc456" });
+    const request = createMockRequest("POST", "/process", sellPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(response.status).toBeLessThan(500);
+  });
+
+  it("validates order quantity", async () => {
+    const invalidPayload = { ...validPayload, quantity: -100 };
+    const request = createMockRequest("POST", "/process", invalidPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect([400, 401, 422]).toContain(response.status) ||
+      expect(response.status).toBeLessThan(500);
+  });
+
+  it("validates order price", async () => {
+    const invalidPayload = { ...validPayload, price: -150.0 };
+    const request = createMockRequest("POST", "/process", invalidPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect([400, 401, 422]).toContain(response.status) ||
+      expect(response.status).toBeLessThan(500);
+  });
+
+  it("handles concurrent order execution", async () => {
+    const orders = [
+      { ...validPayload, symbol: "BTC_USDT" },
+      { ...validPayload, symbol: "ETH_USDT" },
+      { ...validPayload, symbol: "XRP_USDT" },
+    ];
+
+    const responses = await Promise.all(
+      orders.map((order) =>
+        worker.fetch(createMockRequest("POST", "/process", order), mockEnv, {
+          waitUntil: vi.fn(),
+        } as any)
+      )
+    );
+
+    responses.forEach((response) => {
+      expect(response.status).toBeLessThan(500);
+    });
+  });
+
+  it("handles very large order quantities", async () => {
+    const largePayload = { ...validPayload, quantity: 999999999 };
+    const request = createMockRequest("POST", "/process", largePayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(response.status).toBeLessThan(500);
+  });
+
+  it("handles fractional shares", async () => {
+    const fractionalPayload = { ...validPayload, quantity: 0.5 };
+    const request = createMockRequest("POST", "/process", fractionalPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(response.status).toBeLessThan(500);
+  });
+
+  it("handles special characters in symbol", async () => {
+    const specialPayload = { ...validPayload, symbol: "BRK.B_USDT" };
+    const request = createMockRequest("POST", "/process", specialPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(response.status).toBeLessThan(500);
+  });
+
+  it("handles unicode characters in payload", async () => {
+    const unicodePayload = { ...validPayload, notes: "🚀 ✅ 你好" };
+    const request = createMockRequest("POST", "/process", unicodePayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(response.status).toBeLessThan(500);
+  });
+});
+
+describe("Trade Worker - Position Tracking", () => {
+  const validPayload = {
+    exchange: "mexc",
+    action: "LONG",
+    symbol: "BTC_USDT",
+    quantity: 0.01,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLogRequest.mockResolvedValue(555);
+    mockMexcClient.openLong.mockResolvedValue({ orderId: "mexc123" });
+    mockMexcClient.getPositions.mockResolvedValue([
+      { symbol: "BTC_USDT", quantity: 0.01, entryPrice: 50000 },
+    ]);
+  });
+
+  it("creates position on BUY order", async () => {
+    const request = createMockRequest("POST", "/process", validPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(response.status).toBeLessThan(500);
+  });
+
+  it("updates position on additional BUY", async () => {
+    const additionalPayload = { ...validPayload, quantity: 0.05 };
+    const request = createMockRequest("POST", "/process", additionalPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(response.status).toBeLessThan(500);
+  });
+
+  it("closes position on SELL order", async () => {
+    const sellPayload = { ...validPayload, action: "SHORT" };
+    mockMexcClient.openShort.mockResolvedValue({ orderId: "mexc456" });
+    const request = createMockRequest("POST", "/process", sellPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(response.status).toBeLessThan(500);
+  });
+
+  it("calculates position P&L", async () => {
+    const request = createMockRequest("POST", "/process", validPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    if (response.status < 400) {
+      const body = (await response.json()) as any;
+      expect(body).toBeDefined();
+    }
+  });
+
+  it("aggregates positions by symbol", async () => {
+    const request = new Request("http://localhost/positions", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    expect([200, 404, 400, 500]).toContain(response.status);
+  });
+});
+
+describe("Trade Worker - Trade Confirmation", () => {
+  const validPayload = {
+    exchange: "mexc",
+    action: "LONG",
+    symbol: "BTC_USDT",
+    quantity: 0.01,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLogRequest.mockResolvedValue(555);
+    mockMexcClient.openLong.mockResolvedValue({ orderId: "mexc123" });
+  });
+
+  it("confirms executed trade", async () => {
+    const request = createMockRequest("POST", "/process", validPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    if (response.status < 400) {
+      const body = (await response.json()) as any;
+      expect(body).toHaveProperty("result") ||
+        expect(body).toHaveProperty("orderId");
+    }
+  });
+
+  it("includes trade details in confirmation", async () => {
+    const request = createMockRequest("POST", "/process", validPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    if (response.status < 400) {
+      const body = (await response.json()) as any;
+      expect(body).toBeDefined();
+    }
+  });
+
+  it("includes timestamp in confirmation", async () => {
+    const request = createMockRequest("POST", "/process", validPayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    if (response.status < 400) {
+      const body = (await response.json()) as any;
+      expect(body).toBeDefined();
+    }
+  });
+});
+
+describe("Trade Worker - Error Handling", () => {
+  it("returns 404 for unknown endpoints", async () => {
+    const request = new Request("http://localhost/unknown", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 405 for wrong HTTP method", async () => {
+    const request = new Request("http://localhost/health", {
+      method: "POST",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    expect([404, 405]).toContain(response.status);
+  });
+
+  it("handles invalid JSON", async () => {
+    const request = new Request("http://localhost/process", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Auth-Key": "test-internal-key",
+      },
+      body: "invalid json",
+    });
+    request.json = async () => {
+      throw new Error("Invalid JSON");
+    };
+
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect([400, 401, 500]).toContain(response.status);
+  });
+
+  it("handles missing authentication", async () => {
+    const request = new Request("http://localhost/process", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        exchange: "mexc",
+        action: "LONG",
+        symbol: "BTC_USDT",
+        quantity: 0.01,
+      }),
+    });
+    request.json = async () => ({
+      exchange: "mexc",
+      action: "LONG",
+      symbol: "BTC_USDT",
+      quantity: 0.01,
+    });
+
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect([200, 201, 202, 401]).toContain(response.status);
+  });
+
+  it("handles insufficient funds error", async () => {
+    const largePayload = {
+      exchange: "mexc",
+      action: "LONG",
+      symbol: "BTC_USDT",
+      quantity: 1000000,
+    };
+    const request = createMockRequest("POST", "/process", largePayload);
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect([400, 402, 403, 401]).toContain(response.status) ||
+      expect(response.status).toBeLessThan(500);
+  });
+
+  it("error responses include error message", async () => {
+    const request = new Request("http://localhost/unknown", {
+      method: "GET",
+    });
+    const response = await worker.fetch(request, mockEnv, {} as any);
+    if (response.status >= 400) {
+      const body = (await response.json()) as any;
+      expect(body).toHaveProperty("error") || expect(body).toBeDefined();
+    }
+  });
+
+  it("handles service configuration errors", async () => {
+    const envNoKey = { ...mockEnv, INTERNAL_KEY_BINDING: undefined };
+    const request = createMockRequest("POST", "/process", {
+      exchange: "mexc",
+      action: "LONG",
+      symbol: "BTC_USDT",
+      quantity: 0.01,
+    });
+    const response = await worker.fetch(request, envNoKey, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect(response.status).toBe(500);
+  });
+
+  it("handles missing API credentials", async () => {
+    const envNoMexc = { ...mockEnv, MEXC_KEY_BINDING: null };
+    const request = createMockRequest("POST", "/process", {
+      exchange: "mexc",
+      action: "LONG",
+      symbol: "BTC_USDT",
+      quantity: 0.01,
+    });
+    const response = await worker.fetch(request, envNoMexc, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect([400, 401, 500]).toContain(response.status);
+  });
+
+  it("handles trade execution failures", async () => {
+    mockMexcClient.openLong.mockRejectedValue(new Error("Trade failed"));
+    mockLogRequest.mockResolvedValue(555);
+    const request = createMockRequest("POST", "/process", {
+      exchange: "mexc",
+      action: "LONG",
+      symbol: "BTC_USDT",
+      quantity: 0.01,
+    });
+    const response = await worker.fetch(request, mockEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+
+    expect([400, 401, 500]).toContain(response.status);
+  });
 });

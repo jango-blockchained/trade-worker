@@ -39,12 +39,6 @@ export interface ExecutionEnv extends AnalyticsEnv {
   BINANCE_SECRET_BINDING?: string;
   BYBIT_KEY_BINDING?: string;
   BYBIT_SECRET_BINDING?: string;
-  __mocks__?: {
-    MexcClient?: unknown;
-    BinanceClient?: unknown;
-    BybitClient?: unknown;
-    DbLogger?: unknown;
-  };
 }
 
 // Generic client interface (mirrored from index.ts to avoid circular dependency)

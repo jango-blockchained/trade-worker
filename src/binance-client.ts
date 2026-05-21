@@ -1,7 +1,7 @@
 // workers/trade-worker/src/binance-client.ts
 
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
-import { bufferToHex } from "./shared/exchange-client";
+import { BaseExchangeClient } from "./shared/base-exchange-client";
 
 // Define interfaces for Binance API responses (adjust based on actual API)
 interface BinanceErrorResponse {
@@ -12,65 +12,21 @@ interface BinanceErrorResponse {
 // Define generic or specific success response types if known
 type BinanceApiResponse<T> = T | BinanceErrorResponse;
 
-// Interface for the client methods
-export interface IBinanceClient {
-  setLeverage(symbol: string, leverage: number): Promise<any>;
-  executeTrade(params: {
-    symbol: string;
-    side: string;
-    orderType: string;
-    quantity: number;
-    price?: number;
-    reduceOnly?: boolean;
-  }): Promise<any>;
-  getAccountInfo(): Promise<any>;
-  getPositions(symbol?: string): Promise<any>;
-  openLong(
-    symbol: string,
-    quantity: number,
-    price?: number,
-    orderType?: string
-  ): Promise<any>; // Helper
-  openShort(
-    symbol: string,
-    quantity: number,
-    price?: number,
-    orderType?: string
-  ): Promise<any>; // Helper
-  closeLong(symbol: string, quantity: number): Promise<any>; // Helper
-  closeShort(symbol: string, quantity: number): Promise<any>; // Helper
-}
-
 /**
  * Binance API client implementation.
  */
-export class BinanceClient implements IBinanceClient {
-  private readonly apiKey: string;
-  private readonly apiSecret: string;
-  private readonly baseUrl: string = "https://fapi.binance.com"; // Futures API
-  private readonly importedKeyPromise: Promise<CryptoKey>;
-
+export class BinanceClient extends BaseExchangeClient {
   private logger = createLogger({
     service: "trade-worker",
     module: "binance-client",
   });
 
   constructor(apiKey: string, apiSecret: string) {
-    if (!apiKey || !apiSecret) {
-      throw new Error("Binance API key and secret are required.");
-    }
-    this.apiKey = apiKey;
-    this.apiSecret = apiSecret;
+    super(apiKey, apiSecret);
+  }
 
-    // Pre-import the HMAC key to avoid expensive importKey on every request
-    const encoder = new TextEncoder();
-    this.importedKeyPromise = crypto.subtle.importKey(
-      "raw",
-      encoder.encode(apiSecret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
+  protected getDefaultBaseUrl(): string {
+    return "https://fapi.binance.com"; // Futures API
   }
 
   /**
@@ -84,17 +40,7 @@ export class BinanceClient implements IBinanceClient {
       params as Record<string, string>
     ).toString();
 
-    const encoder = new TextEncoder();
-    const message = encoder.encode(queryString);
-
-    const importedKey = await this.importedKeyPromise;
-    const signatureBuffer = await crypto.subtle.sign(
-      "HMAC",
-      importedKey,
-      message
-    );
-
-    return bufferToHex(signatureBuffer);
+    return this.cryptoSign(queryString);
   }
 
   /**
@@ -192,59 +138,6 @@ export class BinanceClient implements IBinanceClient {
     }
 
     return this.makeRequest<any>("POST", path, apiParams);
-  }
-
-  // --- Helper Methods ---
-  async openLong(
-    symbol: string,
-    quantity: number,
-    price?: number,
-    orderType: string = "MARKET"
-  ): Promise<any> {
-    return this.executeTrade({
-      symbol,
-      side: "BUY",
-      quantity,
-      price,
-      orderType,
-    });
-  }
-
-  async openShort(
-    symbol: string,
-    quantity: number,
-    price?: number,
-    orderType: string = "MARKET"
-  ): Promise<any> {
-    return this.executeTrade({
-      symbol,
-      side: "SELL",
-      quantity,
-      price,
-      orderType,
-    });
-  }
-
-  async closeLong(symbol: string, quantity: number): Promise<any> {
-    // Close long = place a SELL order with reduceOnly=true
-    return this.executeTrade({
-      symbol,
-      side: "SELL",
-      quantity,
-      orderType: "MARKET",
-      reduceOnly: true,
-    });
-  }
-
-  async closeShort(symbol: string, quantity: number): Promise<any> {
-    // Close short = place a BUY order with reduceOnly=true
-    return this.executeTrade({
-      symbol,
-      side: "BUY",
-      quantity,
-      orderType: "MARKET",
-      reduceOnly: true,
-    });
   }
 
   // --- Account Info ---

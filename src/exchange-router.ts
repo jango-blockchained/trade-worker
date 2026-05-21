@@ -21,6 +21,22 @@ const logger = createLogger({
 // Re-export generic IExchangeProvider for backward compat
 export type { IExchangeProvider };
 
+/**
+ * Module-level factory functions for testability.
+ * Use vi.spyOn(factories, "createBinanceClient") etc. in tests to inject mock clients.
+ */
+export const factories = {
+  createBinanceClient(apiKey: string, apiSecret: string): IExchangeClient {
+    return new BinanceClient(apiKey, apiSecret);
+  },
+  createMexcClient(apiKey: string, apiSecret: string): IExchangeClient {
+    return new MexcClient(apiKey, apiSecret);
+  },
+  createBybitClient(apiKey: string, apiSecret: string): IExchangeClient {
+    return new BybitClient(apiKey, apiSecret);
+  },
+};
+
 // Provider type alias bound to trade-worker's types
 type TradeExchangeProvider = IExchangeProvider<IExchangeClient, Env>;
 
@@ -31,8 +47,7 @@ export class BinanceProvider implements TradeExchangeProvider {
     const apiSecret = env.BINANCE_SECRET_BINDING;
     if (!apiKey || !apiSecret)
       throw new Error("Binance API secrets unavailable.");
-    const ClientClass = env.__mocks__?.BinanceClient || BinanceClient;
-    return new ClientClass(apiKey, apiSecret);
+    return factories.createBinanceClient(apiKey, apiSecret);
   }
   hasCredentials(env: Env): boolean {
     return !!(env.BINANCE_KEY_BINDING && env.BINANCE_SECRET_BINDING);
@@ -45,8 +60,7 @@ export class MexcProvider implements TradeExchangeProvider {
     const apiKey = env.MEXC_KEY_BINDING;
     const apiSecret = env.MEXC_SECRET_BINDING;
     if (!apiKey || !apiSecret) throw new Error("MEXC API secrets unavailable.");
-    const ClientClass = env.__mocks__?.MexcClient || MexcClient;
-    return new ClientClass(apiKey, apiSecret);
+    return factories.createMexcClient(apiKey, apiSecret);
   }
   hasCredentials(env: Env): boolean {
     return !!(env.MEXC_KEY_BINDING && env.MEXC_SECRET_BINDING);
@@ -60,8 +74,7 @@ export class BybitProvider implements TradeExchangeProvider {
     const apiSecret = env.BYBIT_SECRET_BINDING;
     if (!apiKey || !apiSecret)
       throw new Error("Bybit API secrets unavailable.");
-    const ClientClass = env.__mocks__?.BybitClient || BybitClient;
-    return new ClientClass(apiKey, apiSecret);
+    return factories.createBybitClient(apiKey, apiSecret);
   }
   hasCredentials(env: Env): boolean {
     return !!(env.BYBIT_KEY_BINDING && env.BYBIT_SECRET_BINDING);

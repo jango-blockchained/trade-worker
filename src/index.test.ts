@@ -7,7 +7,8 @@ import {
   beforeAll,
   jest as vi,
 } from "bun:test";
-import worker from "./index"; // Import the worker
+import worker, { factories } from "./index";
+import { factories as routerFactories } from "./exchange-router";
 import { validateApiCredentials, validateTradePayload } from "./execution";
 import { saveReportToR2 } from "./reports";
 
@@ -27,11 +28,6 @@ const mockMexcClient = createMockClient();
 const mockBinanceClient = createMockClient();
 const mockBybitClient = createMockClient();
 
-// Mock Constructors
-const mockMexcClientConstructor = vi.fn(() => mockMexcClient);
-const mockBinanceClientConstructor = vi.fn(() => mockBinanceClient);
-const mockBybitClientConstructor = vi.fn(() => mockBybitClient);
-
 // --- Mock DbLogger ---
 const mockLogRequest = vi.fn();
 const mockLogResponse = vi.fn();
@@ -41,7 +37,18 @@ const mockDbLogger = {
   logResponse: mockLogResponse,
   logTrade: mockLogTrade,
 };
-const mockDbLoggerConstructor = vi.fn(() => mockDbLogger);
+
+// --- Wire up factory spies for dependency injection ---
+vi.spyOn(routerFactories, "createMexcClient").mockImplementation(
+  () => mockMexcClient
+);
+vi.spyOn(routerFactories, "createBinanceClient").mockImplementation(
+  () => mockBinanceClient
+);
+vi.spyOn(routerFactories, "createBybitClient").mockImplementation(
+  () => mockBybitClient
+);
+vi.spyOn(factories, "createDbLogger").mockImplementation(() => mockDbLogger);
 
 // Mock the D1Database methods globally or per suite/test
 const mockRun = vi.fn();
@@ -84,14 +91,6 @@ const mockEnv = {
   BYBIT_KEY_BINDING: "bybit-key",
   BYBIT_SECRET_BINDING: "bybit-secret",
   D1_SERVICE: { fetch: vi.fn() }, // Mock service binding
-  // Add mock constructors to env for dependency injection during tests
-  __mocks__: {
-    MexcClient: mockMexcClientConstructor,
-    BinanceClient: mockBinanceClientConstructor,
-    BybitClient: mockBybitClientConstructor,
-    DbLogger: mockDbLoggerConstructor,
-  },
-  // ... other bindings ...
 } as any; // Use 'as any' for simplicity in testing, or define a more specific mock type
 
 // Helper to create a mock Request object
@@ -545,11 +544,11 @@ describe("Trade Worker Handlers", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset mocks for clients and logger
-    mockMexcClientConstructor.mockClear();
-    mockBinanceClientConstructor.mockClear();
-    mockBybitClientConstructor.mockClear();
-    mockDbLoggerConstructor.mockClear();
+    // Reset factory spies for clients and logger
+    routerFactories.createMexcClient.mockClear();
+    routerFactories.createBinanceClient.mockClear();
+    routerFactories.createBybitClient.mockClear();
+    factories.createDbLogger.mockClear();
     Object.values(mockMexcClient).forEach((fn) => fn.mockReset());
     Object.values(mockBinanceClient).forEach((fn) => fn.mockReset());
     Object.values(mockBybitClient).forEach((fn) => fn.mockReset());
@@ -585,7 +584,7 @@ describe("Trade Worker Handlers", () => {
       expect(body.result).toEqual({ orderId: "mexc123" });
 
       // Check logger init and calls
-      expect(mockDbLoggerConstructor).toHaveBeenCalledWith(mockEnv);
+      expect(factories.createDbLogger).toHaveBeenCalledWith(mockEnv);
       expect(mockLogRequest).toHaveBeenCalledWith(request, {
         internalAuthKey: "test-internal-key",
         payload: validPayload,
@@ -599,12 +598,12 @@ describe("Trade Worker Handlers", () => {
       );
 
       // Check client init
-      expect(mockMexcClientConstructor).toHaveBeenCalledWith(
+      expect(routerFactories.createMexcClient).toHaveBeenCalledWith(
         "mexc-key",
         "mexc-secret"
       );
-      expect(mockBinanceClientConstructor).not.toHaveBeenCalled();
-      expect(mockBybitClientConstructor).not.toHaveBeenCalled();
+      expect(routerFactories.createBinanceClient).not.toHaveBeenCalled();
+      expect(routerFactories.createBybitClient).not.toHaveBeenCalled();
 
       // Check client calls (leverage and trade)
       expect(mockMexcClient.setLeverage).toHaveBeenCalledWith(
@@ -702,13 +701,13 @@ describe("Trade Worker Handlers", () => {
 
       await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
 
-      expect(mockBinanceClientConstructor).toHaveBeenCalledWith(
+      expect(routerFactories.createBinanceClient).toHaveBeenCalledWith(
         "binance-key",
         "binance-secret"
       );
       expect(mockBinanceClient.openLong).toHaveBeenCalled();
-      expect(mockMexcClientConstructor).not.toHaveBeenCalled();
-      expect(mockBybitClientConstructor).not.toHaveBeenCalled();
+      expect(routerFactories.createMexcClient).not.toHaveBeenCalled();
+      expect(routerFactories.createBybitClient).not.toHaveBeenCalled();
     });
 
     it("should skip leverage setting if leverage not in payload", async () => {
@@ -765,7 +764,7 @@ describe("Trade Worker Handlers", () => {
       await worker.fetch(request, mockEnv, { waitUntil: vi.fn() } as any);
 
       // Check trade was executed
-      expect(mockMexcClientConstructor).toHaveBeenCalled();
+      expect(routerFactories.createMexcClient).toHaveBeenCalled();
       expect(mockMexcClient.openLong).toHaveBeenCalled();
       // Check logging happened
       expect(mockLogRequest).toHaveBeenCalled();
@@ -977,7 +976,7 @@ describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
     } as any);
 
     if (response.status < 400) {
-      expect(mockMexcClientConstructor).toHaveBeenCalled();
+      expect(routerFactories.createMexcClient).toHaveBeenCalled();
     }
   });
 });

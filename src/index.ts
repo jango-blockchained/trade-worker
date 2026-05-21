@@ -51,10 +51,22 @@ import {
 
 // --- Type Definitions ---
 
-export interface Env extends Cloudflare.Env, ExecutionEnv {}
+export interface Env extends Cloudflare.Env, ExecutionEnv {
+  [key: string]: unknown;
+}
 
 // Payload structure for legacy /process requests
 type TradeProcessRequestBody = ProcessRequestBody<WebhookPayload>;
+
+/**
+ * Module-level factory function for testability.
+ * Use vi.spyOn(factories, "createDbLogger") in tests to inject a mock DbLogger.
+ */
+export const factories = {
+  createDbLogger(env: ExecutionEnv): DbLogger {
+    return new DbLogger(env);
+  },
+};
 
 // --- Constants ---
 const MAX_RETRIES = 5;
@@ -285,9 +297,7 @@ async function handleWebhookRequest(
   ctx: ExecutionContext
 ): Promise<Response> {
   const startTime = Date.now();
-  // Use mock or real DbLogger
-  const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
-  const dbLogger = new DbLoggerClass(env as ExecutionEnv);
+  const dbLogger = factories.createDbLogger(env as ExecutionEnv);
   let dbLogId: string | null = null;
   const incomingRequestId =
     request.headers.get("X-Request-ID") || crypto.randomUUID();
@@ -402,8 +412,7 @@ async function handleProcessRequest(
   ctx: ExecutionContext
 ): Promise<Response> {
   const startTime = Date.now();
-  const DbLoggerClass = env.__mocks__?.DbLogger || DbLogger;
-  const dbLogger = new DbLoggerClass(env as ExecutionEnv);
+  const dbLogger = factories.createDbLogger(env as ExecutionEnv);
   let dbLogId: string | null = null;
   let incomingRequestId: string | undefined;
 

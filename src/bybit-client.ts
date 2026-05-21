@@ -2,7 +2,7 @@
 
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { Logger } from "@jango-blockchained/hoox-shared/middleware";
-import { bufferToHex } from "./shared/exchange-client";
+import { BaseExchangeClient } from "./shared/base-exchange-client";
 
 // Define interfaces for Bybit V5 API responses
 interface BybitBaseResponse {
@@ -23,89 +23,35 @@ interface BybitErrorResponse extends BybitBaseResponse {
 
 type BybitApiResponse<T> = BybitSuccessResponse<T> | BybitErrorResponse;
 
-// Interface for the client methods
-export interface IBybitClient {
-  setLeverage(symbol: string, leverage: number): Promise<any>;
-  executeTrade(params: {
-    symbol: string;
-    side: string;
-    orderType: string;
-    quantity: number;
-    price?: number;
-    reduceOnly?: boolean;
-  }): Promise<any>;
-  getAccountInfo(): Promise<any>;
-  getPositions(symbol?: string): Promise<any>;
-  openLong(
-    symbol: string,
-    quantity: number,
-    price?: number,
-    orderType?: string
-  ): Promise<any>; // Helper
-  openShort(
-    symbol: string,
-    quantity: number,
-    price?: number,
-    orderType?: string
-  ): Promise<any>; // Helper
-  closeLong(symbol: string, quantity: number): Promise<any>; // Helper
-  closeShort(symbol: string, quantity: number): Promise<any>; // Helper
-}
-
 /**
  * Bybit API V5 client implementation.
  */
-export class BybitClient implements IBybitClient {
-  private readonly apiKey: string;
-  private readonly apiSecret: string;
-  private readonly baseUrl: string = "https://api.bybit.com";
+export class BybitClient extends BaseExchangeClient {
   private readonly recvWindow: number = 5000; // Bybit specific recv_window
-  private readonly importedKeyPromise: Promise<CryptoKey>;
   private readonly logger: Logger;
 
   constructor(apiKey: string, apiSecret: string) {
-    if (!apiKey || !apiSecret) {
-      throw new Error("Bybit API key and secret are required.");
-    }
-    this.apiKey = apiKey;
-    this.apiSecret = apiSecret;
+    super(apiKey, apiSecret);
     this.logger = createLogger({
       service: "trade-worker",
       module: "bybit-client",
     });
+  }
 
-    // Pre-import the HMAC key to avoid expensive importKey on every request
-    const encoder = new TextEncoder();
-    this.importedKeyPromise = crypto.subtle.importKey(
-      "raw",
-      encoder.encode(apiSecret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
+  protected getDefaultBaseUrl(): string {
+    return "https://api.bybit.com";
   }
 
   /**
    * Generates HMAC-SHA256 signature for authenticated requests.
+   * Bybit V5 signature: timestamp + apiKey + recvWindow + paramsStr
    */
   private async generateSignature(
     timestamp: number,
     paramsStr: string
   ): Promise<string> {
-    // Bybit V5 signature: timestamp + apiKey + recvWindow + paramsStr
     const signaturePayload = `${timestamp}${this.apiKey}${this.recvWindow}${paramsStr}`;
-
-    const encoder = new TextEncoder();
-    const message = encoder.encode(signaturePayload);
-
-    const importedKey = await this.importedKeyPromise;
-    const signatureBuffer = await crypto.subtle.sign(
-      "HMAC",
-      importedKey,
-      message
-    );
-
-    return bufferToHex(signatureBuffer);
+    return this.cryptoSign(signaturePayload);
   }
 
   /**
@@ -127,7 +73,9 @@ export class BybitClient implements IBybitClient {
         Object.keys(params)
           .sort()
           .forEach((key) => (sortedParams[key] = params[key]));
-        paramsStr = new URLSearchParams(sortedParams).toString();
+        paramsStr = new URLSearchParams(
+          sortedParams as Record<string, string>
+        ).toString();
         finalUrl += `?${paramsStr}`;
       }
     } else {
@@ -227,57 +175,6 @@ export class BybitClient implements IBybitClient {
     }
 
     return this.makeRequest<any>("POST", path, apiParams);
-  }
-
-  // --- Helper Methods ---
-  async openLong(
-    symbol: string,
-    quantity: number,
-    price?: number,
-    orderType: string = "Market"
-  ): Promise<any> {
-    return this.executeTrade({
-      symbol,
-      side: "Buy",
-      quantity,
-      price,
-      orderType,
-    });
-  }
-
-  async openShort(
-    symbol: string,
-    quantity: number,
-    price?: number,
-    orderType: string = "Market"
-  ): Promise<any> {
-    return this.executeTrade({
-      symbol,
-      side: "Sell",
-      quantity,
-      price,
-      orderType,
-    });
-  }
-
-  async closeLong(symbol: string, quantity: number): Promise<any> {
-    return this.executeTrade({
-      symbol,
-      side: "Sell",
-      quantity,
-      orderType: "Market",
-      reduceOnly: true,
-    });
-  }
-
-  async closeShort(symbol: string, quantity: number): Promise<any> {
-    return this.executeTrade({
-      symbol,
-      side: "Buy",
-      quantity,
-      orderType: "Market",
-      reduceOnly: true,
-    });
   }
 
   // --- Account Info ---

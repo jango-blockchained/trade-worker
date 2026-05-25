@@ -921,8 +921,8 @@ describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
       waitUntil: vi.fn(),
     } as any);
 
-    expect([400, 401]).toContain(response.status) ||
-      expect(response.status).toBeLessThan(500);
+    expect([400, 401]).toContain(response.status);
+    expect(response.status).toBeLessThan(500);
   });
 
   it("POST /webhook returns proper response", async () => {
@@ -1061,8 +1061,8 @@ describe("Trade Worker - Order Execution", () => {
     const response = await worker.fetch(request, mockEnv, {
       waitUntil: vi.fn(),
     } as any);
-    expect([400, 401, 422]).toContain(response.status) ||
-      expect(response.status).toBeLessThan(500);
+    expect([400, 401, 422]).toContain(response.status);
+    expect(response.status).toBeLessThan(500);
   });
 
   it("validates order price", async () => {
@@ -1071,8 +1071,8 @@ describe("Trade Worker - Order Execution", () => {
     const response = await worker.fetch(request, mockEnv, {
       waitUntil: vi.fn(),
     } as any);
-    expect([400, 401, 422]).toContain(response.status) ||
-      expect(response.status).toBeLessThan(500);
+    expect([400, 401, 422]).toContain(response.status);
+    expect(response.status).toBeLessThan(500);
   });
 
   it("handles concurrent order execution", async () => {
@@ -1334,7 +1334,8 @@ describe("Trade Worker - Error Handling", () => {
     const response = await worker.fetch(request, mockEnv, {} as any);
     if (response.status >= 400) {
       const body = (await response.json()) as any;
-      expect(body).toHaveProperty("error") || expect(body).toBeDefined();
+      expect(body).toHaveProperty("error");
+      expect(body).toBeDefined();
     }
   });
 

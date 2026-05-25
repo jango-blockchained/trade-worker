@@ -31,6 +31,7 @@ import { sendTradeNotificationToTelegram } from "./notifications";
 export interface ExecutionEnv extends AnalyticsEnv {
   CONFIG_KV?: KVNamespace;
   D1_SERVICE?: Fetcher;
+  INTERNAL_KEY_BINDING?: string;
   TELEGRAM_SERVICE?: Fetcher;
   TELEGRAM_INTERNAL_KEY_BINDING?: string;
   MEXC_KEY_BINDING?: string;
@@ -119,8 +120,12 @@ export async function updateD1TradeRecords(
     };
 
     await Promise.all([
-      serviceFetch(env.D1_SERVICE, "/query", tradePayload),
-      serviceFetch(env.D1_SERVICE, "/query", posPayload),
+      serviceFetch(env.D1_SERVICE, "/query", tradePayload, {
+        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "" },
+      }),
+      serviceFetch(env.D1_SERVICE, "/query", posPayload, {
+        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "" },
+      }),
     ]);
   } catch (error: unknown) {
     logger.error("Failed to update D1 trades and positions tables", {

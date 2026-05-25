@@ -2,24 +2,23 @@ import { describe, expect, test, beforeEach, jest } from "bun:test";
 import { DbLogger, type IDbLogger } from "../src/db-logger";
 import type { R2Bucket } from "@cloudflare/workers-types";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 // --- Mocks ---
 const mockR2Put = jest.fn();
-const mockRandomUUID = jest.fn();
-
-global.crypto = {
-  ...global.crypto, // Keep existing crypto methods if any
-  randomUUID: mockRandomUUID,
-} as any;
 
 // --- Test Suite ---
+// NOTE: This suite does NOT mock crypto.randomUUID to avoid polluting
+// global state across other test files. Real UUIDs are generated and
+// matched against a UUID regex pattern instead.
+
 describe("DbLogger", () => {
   let mockEnv: { SYSTEM_LOGS_BUCKET?: any };
   let logger: IDbLogger;
-  const TEST_REQUEST_ID = "db-req-uuid-123";
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockRandomUUID.mockReturnValue(TEST_REQUEST_ID);
 
     // Default mock env with R2 bucket enabled
     mockEnv = {
@@ -77,16 +76,16 @@ describe("DbLogger", () => {
 
     const result = await logger.logRequest(request, requestBody);
 
-    expect(result).toBe(TEST_REQUEST_ID);
+    expect(result).toMatch(UUID_RE);
     expect(mockR2Put).toHaveBeenCalledTimes(1);
 
     const putCallArgs = mockR2Put.mock.calls[0];
     expect(putCallArgs[0]).toContain(`requests/`);
-    expect(putCallArgs[0]).toContain(`${TEST_REQUEST_ID}.json`);
+    expect(putCallArgs[0]).toContain(`${result}.json`);
 
     const payload = JSON.parse(putCallArgs[1]);
     expect(payload.type).toBe("request");
-    expect(payload.id).toBe(TEST_REQUEST_ID);
+    expect(payload.id).toBe(result);
     expect(payload.method).toBe("POST");
     expect(payload.path).toBe("/api/trade");
     expect(payload.body).toEqual(requestBody);
@@ -112,7 +111,7 @@ describe("DbLogger", () => {
     mockEnv = {};
     const disabledLogger = new DbLogger(mockEnv as any);
     const response = new Response("OK", { status: 200 });
-    await disabledLogger.logResponse(TEST_REQUEST_ID, response);
+    await disabledLogger.logResponse("req-id", response);
     expect(mockR2Put).not.toHaveBeenCalled();
   });
 
@@ -123,6 +122,7 @@ describe("DbLogger", () => {
   });
 
   test("logResponse should call SYSTEM_LOGS_BUCKET put with correct data", async () => {
+    const requestId = crypto.randomUUID();
     const responseStatus = 201;
     const responseBody = JSON.stringify({ message: "Created" });
     const responseHeaders = new Headers({ "x-custom-header": "value" });
@@ -133,17 +133,17 @@ describe("DbLogger", () => {
     const startTime = Date.now() - 150; // 150ms execution time
     const error = null;
 
-    await logger.logResponse(TEST_REQUEST_ID, response, error, startTime);
+    await logger.logResponse(requestId, response, error, startTime);
 
     expect(mockR2Put).toHaveBeenCalledTimes(1);
 
     const putCallArgs = mockR2Put.mock.calls[0];
     expect(putCallArgs[0]).toContain(`responses/`);
-    expect(putCallArgs[0]).toContain(`${TEST_REQUEST_ID}.json`);
+    expect(putCallArgs[0]).toContain(`${requestId}.json`);
 
     const payload = JSON.parse(putCallArgs[1]);
     expect(payload.type).toBe("response");
-    expect(payload.request_id).toBe(TEST_REQUEST_ID);
+    expect(payload.request_id).toBe(requestId);
     expect(payload.status_code).toBe(responseStatus);
     expect(payload.body).toBe(responseBody);
     expect(payload.error).toBeNull();
@@ -153,7 +153,7 @@ describe("DbLogger", () => {
     const response = new Response("Error", { status: 500 });
     const error = new Error("Something failed");
 
-    await logger.logResponse(TEST_REQUEST_ID, response, error);
+    await logger.logResponse("req-id", response, error);
 
     expect(mockR2Put).toHaveBeenCalledTimes(1);
     const putCallArgs = mockR2Put.mock.calls[0];
@@ -169,7 +169,7 @@ describe("DbLogger", () => {
 
     // Should not throw
     await expect(
-      logger.logResponse(TEST_REQUEST_ID, response)
+      logger.logResponse("req-id", response)
     ).resolves.toBeUndefined();
 
     expect(errorSpy).toHaveBeenCalledWith(

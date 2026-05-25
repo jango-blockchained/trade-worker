@@ -57,7 +57,7 @@ export async function insertSignal(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Internal-Secret": env.INTERNAL_KEY_BINDING || "",
+      "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
     },
     body: JSON.stringify({ query, params }),
   });
@@ -66,7 +66,12 @@ export async function insertSignal(
     throw new Error(`D1_SERVICE responded with ${response.status}`);
   }
 
-  const data = (await response.json()) as { success: boolean; error?: string; changes?: number; lastRowId?: number };
+  const data = (await response.json()) as {
+    success: boolean;
+    error?: string;
+    changes?: number;
+    lastRowId?: number;
+  };
   if (!data.success) {
     return {
       success: false,
@@ -99,7 +104,7 @@ export async function getRecentSignals(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Internal-Secret": env.INTERNAL_KEY_BINDING || "",
+      "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
     },
     body: JSON.stringify({ query, params: [limit] }),
   });
@@ -108,7 +113,11 @@ export async function getRecentSignals(
     throw new Error(`D1_SERVICE responded with ${response.status}`);
   }
 
-  const data = (await response.json()) as { success: boolean; error?: string; results?: unknown[] };
+  const data = (await response.json()) as {
+    success: boolean;
+    error?: string;
+    results?: unknown[];
+  };
   if (!data.success) {
     throw new Error(data.error || "D1 getRecentSignals failed");
   }

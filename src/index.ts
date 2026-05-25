@@ -132,7 +132,10 @@ async function logFailedTrade(
       await env.D1_SERVICE.fetch(
         new Request("http://localhost/query", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
+          },
           body: JSON.stringify(logPayload),
         })
       );

@@ -4,6 +4,7 @@ import {
   test,
   beforeEach,
   afterEach,
+  afterAll,
   spyOn,
   mock,
   type Mock,
@@ -21,9 +22,14 @@ const mockSign: Mock<typeof crypto.subtle.sign> = mock(() =>
   Promise.resolve(new ArrayBuffer(0))
 );
 
-// Mock crypto for Bun's environment
+// Preserve original crypto to restore after suite (prevents polluting other tests)
+const origCrypto = globalThis.crypto;
+
+// Mock crypto for Bun's environment — preserves randomUUID to avoid
+// breaking other test suites that depend on it
 Object.defineProperty(globalThis, "crypto", {
   value: {
+    ...origCrypto,
     subtle: {
       importKey: mockImportKey,
       sign: mockSign,
@@ -87,13 +93,13 @@ describe("MexcClient (V1 Futures)", () => {
 
   test("should throw error if API key is missing", () => {
     expect(() => new MexcClient("", API_SECRET)).toThrow(
-      "MEXC API key and secret are required."
+      "MexcClient API key and secret are required."
     );
   });
 
   test("should throw error if API secret is missing", () => {
     expect(() => new MexcClient(API_KEY, "")).toThrow(
-      "MEXC API key and secret are required."
+      "MexcClient API key and secret are required."
     );
   });
 
@@ -372,5 +378,12 @@ describe("MexcClient (V1 Futures)", () => {
     await expect(
       (client as any).makeRequest("GET", "/api/v1/private/account/assets")
     ).rejects.toThrow(networkError);
+  });
+});
+
+afterAll(() => {
+  Object.defineProperty(globalThis, "crypto", {
+    value: origCrypto,
+    writable: true,
   });
 });

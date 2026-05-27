@@ -26,7 +26,7 @@ import { sendTradeNotificationToTelegram } from "./notifications";
  * Only includes the bindings needed by the extracted execution functions
  * and their transitive dependencies (ExchangeRouter, trackAnalytics, etc.).
  */
-export interface ExecutionEnv extends AnalyticsEnv {
+export interface ExecutionEnv {
   CONFIG_KV?: KVNamespace;
   D1_SERVICE?: Fetcher;
   INTERNAL_KEY_BINDING?: string;

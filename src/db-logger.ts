@@ -34,7 +34,6 @@ import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 interface LoggerEnv {
   D1_SERVICE?: Fetcher;
   SYSTEM_LOGS_BUCKET?: R2Bucket;
-  [key: string]: unknown;
 }
 
 // Interface defining the DbLogger's capabilities (optional but good practice)

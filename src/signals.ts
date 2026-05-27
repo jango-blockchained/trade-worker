@@ -17,7 +17,6 @@ const logger = createLogger({ service: "trade-worker", module: "signals" });
 export interface D1Env {
   D1_SERVICE: Fetcher;
   INTERNAL_KEY_BINDING?: string;
-  [key: string]: unknown;
 }
 
 // Structure for storing trade signals in D1

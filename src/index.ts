@@ -46,9 +46,7 @@ import {
 
 // --- Type Definitions ---
 
-export interface Env extends Cloudflare.Env, ExecutionEnv {
-  [key: string]: unknown;
-}
+export interface Env extends Cloudflare.Env {}
 
 // Payload structure for legacy /process requests
 type TradeProcessRequestBody = ProcessRequestBody<WebhookPayload>;
@@ -100,7 +98,7 @@ async function executeTradeFromQueue(
     return {
       success: tradeResult.success ?? false,
       result: tradeResult.result,
-      error: tradeResult.error,
+      error: tradeResult.error || undefined,
     };
   } catch (error: unknown) {
     return { success: false, error: toError(error) };
@@ -378,7 +376,7 @@ async function handleWebhookRequest(
     const response = Errors.internal(errorMsg);
     // Log error response if dbLogId was obtained
     if (dbLogId !== null) {
-      await dbLogger.logResponse(dbLogId, response, error, startTime);
+      await dbLogger.logResponse(dbLogId, response, error as any, startTime);
     } else {
       // Body already consumed by request.json() above, log URL and method instead
       try {
@@ -390,8 +388,8 @@ async function handleWebhookRequest(
           request,
           `[body consumed] ${request.url}`
         );
-        await dbLogger.logResponse(dbLogId, response, error, startTime);
-      } catch (logError) {
+        await dbLogger.logResponse(dbLogId, response, error as any, startTime);
+      } catch (logError: unknown) {
         logger.error("Failed to log error response after initial failure", {
           error: toError(logError),
         });
@@ -497,7 +495,7 @@ async function handleProcessRequest(
     const response = Errors.internal(errorMsg);
     // Log error response if dbLogId was obtained
     if (dbLogId !== null) {
-      await dbLogger.logResponse(dbLogId, response, error, startTime);
+      await dbLogger.logResponse(dbLogId, response, error as any, startTime);
     } else {
       // Body already consumed by request.json() above, log URL and method instead
       try {
@@ -509,8 +507,8 @@ async function handleProcessRequest(
           request,
           `[body consumed] ${request.url}`
         );
-        await dbLogger.logResponse(dbLogId, response, error, startTime);
-      } catch (logError) {
+        await dbLogger.logResponse(dbLogId, response, error as any, startTime);
+      } catch (logError: unknown) {
         logger.error("Failed to log error response after initial failure", {
           error: toError(logError),
         });

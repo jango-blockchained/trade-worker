@@ -104,7 +104,9 @@ describe("sendTradeNotificationToTelegram", () => {
     const call = mockFetch.mock.calls[mockFetch.mock.calls.length - 1] as any;
     const init = call[1] as RequestInit;
     expect(init.headers).toBeDefined();
-    expect((init.headers as Record<string, string>)["X-Internal-Auth-Key"]).toBe("secret-key-123");
+    expect(
+      (init.headers as Record<string, string>)["X-Internal-Auth-Key"]
+    ).toBe("secret-key-123");
   });
 
   test("handles TELEGRAM_SERVICE non-ok response gracefully", async () => {

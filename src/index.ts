@@ -2,12 +2,7 @@ import { MexcClient } from "./mexc-client";
 import { BinanceClient } from "./binance-client";
 import { BybitClient } from "./bybit-client";
 import { DbLogger } from "./db-logger";
-import type { KVNamespace } from "@cloudflare/workers-types";
-import type { R2Bucket } from "@cloudflare/workers-types";
-import type { D1Database } from "@cloudflare/workers-types";
-import type { Fetcher } from "@cloudflare/workers-types";
-import type { Ai } from "@cloudflare/ai";
-import type { ExecutionContext } from "@cloudflare/workers-types";
+
 import {
   Errors,
   createJsonResponse,

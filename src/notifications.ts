@@ -1,4 +1,3 @@
-import type { Fetcher } from "@cloudflare/workers-types";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
 import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";

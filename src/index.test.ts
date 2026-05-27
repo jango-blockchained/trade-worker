@@ -536,11 +536,7 @@ describe("Trade Worker Handlers", () => {
   };
   const logId = 555;
 
-  beforeAll(async () => {
-    // Need to import executeTrade helper if testing handlers directly
-    // const module = await import('./index');
-    // executeTrade = module.executeTrade; // Assuming executeTrade is exported for direct testing
-  });
+  beforeAll(async () => {});
 
   beforeEach(() => {
     vi.clearAllMocks();

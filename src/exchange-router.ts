@@ -21,6 +21,9 @@ const logger = createLogger({
 // Re-export generic IExchangeProvider for backward compat
 export type { IExchangeProvider };
 
+// Re-export worker Env type for execution.ts to use without circular import
+export type { Env };
+
 /**
  * Module-level factory functions for testability.
  * Use vi.spyOn(factories, "createBinanceClient") etc. in tests to inject mock clients.

@@ -1,8 +1,6 @@
 // workers/trade-worker/src/execution.ts
 // Core trade execution logic extracted from index.ts
 
-import type { KVNamespace } from "@cloudflare/workers-types";
-import type { Fetcher } from "@cloudflare/workers-types";
 import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
 import {
   createJsonResponse,
@@ -18,7 +16,7 @@ import {
 } from "@jango-blockchained/hoox-shared/analytics";
 import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 import type { IDbLogger } from "./db-logger";
-import { ExchangeRouter } from "./exchange-router";
+import { ExchangeRouter, type Env } from "./exchange-router";
 import { sendTradeNotificationToTelegram } from "./notifications";
 
 // --- Type Definitions ---
@@ -169,7 +167,8 @@ export function validateTradePayload(payload: unknown): ValidationResult {
     return { isValid: false, error: "Invalid or missing payload" };
   }
 
-  const { exchange, action, symbol, quantity } = payload as WebhookPayload;
+  const wp = payload as WebhookPayload;
+  const { exchange, action, symbol, quantity } = wp;
 
   if (
     !exchange ||
@@ -199,17 +198,17 @@ export function validateTradePayload(payload: unknown): ValidationResult {
 
   // Add further checks (e.g., price/leverage types if present)
   if (
-    payload.price !== undefined &&
-    (typeof payload.price !== "number" || isNaN(payload.price))
+    wp.price !== undefined &&
+    (typeof wp.price !== "number" || isNaN(wp.price))
   ) {
     return { isValid: false, error: "Invalid price in payload" };
   }
   if (
-    payload.leverage !== undefined &&
-    (typeof payload.leverage !== "number" ||
-      isNaN(payload.leverage) ||
-      !Number.isInteger(payload.leverage) ||
-      payload.leverage <= 0)
+    wp.leverage !== undefined &&
+    (typeof wp.leverage !== "number" ||
+      isNaN(wp.leverage) ||
+      !Number.isInteger(wp.leverage) ||
+      wp.leverage <= 0)
   ) {
     return { isValid: false, error: "Invalid leverage in payload" };
   }
@@ -235,7 +234,7 @@ export interface TradeExecutionResult {
  */
 export async function executeTrade(
   payload: WebhookPayload,
-  env: ExecutionEnv,
+  env: Env,
   dbLogger: IDbLogger,
   startTime: number,
   dbLogId: string | null // Changed to string
@@ -389,7 +388,7 @@ export async function executeTrade(
     if (env.TELEGRAM_SERVICE) {
       await sendTradeNotificationToTelegram(
         env,
-        result,
+        result as { success?: boolean; result?: unknown; error?: string },
         routedExchange,
         action,
         quantity,

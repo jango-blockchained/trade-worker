@@ -1,4 +1,3 @@
-import type { R2Bucket } from "@cloudflare/workers-types";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";

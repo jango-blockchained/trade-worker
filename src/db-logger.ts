@@ -28,7 +28,7 @@
 
 // Define Env structure expected by the logger
 // This should align with the Env interface in index.ts
-import type { R2Bucket, Fetcher } from "@cloudflare/workers-types";
+
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 
 interface LoggerEnv {
@@ -81,7 +81,10 @@ export class DbLogger implements IDbLogger {
    * @param requestBody The parsed body of the request (can be any type).
    * @returns The ID of the inserted request log record, or null if disabled/failed.
    */
-  async logRequest(request: Request, requestBody: unknown): Promise<string | null> {
+  async logRequest(
+    request: Request,
+    requestBody: unknown
+  ): Promise<string | null> {
     if (!this.enabled || !this.env.SYSTEM_LOGS_BUCKET) return null;
 
     try {
@@ -96,9 +99,9 @@ export class DbLogger implements IDbLogger {
         if (redactedHeaders[h]) redactedHeaders[h] = "[REDACTED]";
       }
 
-      let redactedBody = requestBody;
+      let redactedBody: unknown = requestBody;
       if (typeof requestBody === "object" && requestBody !== null) {
-        redactedBody = { ...requestBody };
+        redactedBody = { ...(requestBody as Record<string, unknown>) };
         const sensitiveFields = [
           "internalAuthKey",
           "apiKey",
@@ -107,7 +110,13 @@ export class DbLogger implements IDbLogger {
           "token",
         ];
         for (const field of sensitiveFields) {
-          if (field in redactedBody) redactedBody[field] = "[REDACTED]";
+          if (
+            typeof redactedBody === "object" &&
+            redactedBody !== null &&
+            field in redactedBody
+          ) {
+            (redactedBody as Record<string, unknown>)[field] = "[REDACTED]";
+          }
         }
       }
 

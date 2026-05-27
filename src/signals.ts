@@ -1,4 +1,4 @@
-import type { D1Result, Fetcher } from "@cloudflare/workers-types";
+import type { D1Result } from "@cloudflare/workers-types";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import {
   createErrorResponse,
@@ -137,9 +137,9 @@ export async function handlePostSignalRequest(
   request: Request,
   env: D1Env
 ): Promise<Response> {
-  let signalPayload: unknown;
+  let signalPayload: Record<string, unknown>;
   try {
-    signalPayload = await request.json();
+    signalPayload = (await request.json()) as Record<string, unknown>;
   } catch (error: unknown) {
     return createJsonResponse(
       { success: false, error: "Invalid JSON payload" },
@@ -164,10 +164,10 @@ export async function handlePostSignalRequest(
 
   const signalRecord: TradeSignalRecord = {
     signal_id: crypto.randomUUID(), // Generate a unique ID
-    timestamp: signalPayload.timestamp, // Assume provided timestamp is correct
-    symbol: signalPayload.symbol,
-    signal_type: signalPayload.signal_type,
-    source: signalPayload.source,
+    timestamp: signalPayload.timestamp as number, // Assume provided timestamp is correct
+    symbol: signalPayload.symbol as string,
+    signal_type: signalPayload.signal_type as string,
+    source: signalPayload.source as string | undefined,
     raw_data: JSON.stringify(signalPayload), // Store the whole payload as raw data
   };
 

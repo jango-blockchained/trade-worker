@@ -14,7 +14,7 @@
     "checkJs": false, // Do not type-check JS files by default
     "noEmit": true, // Prevent TypeScript from emitting files (Wrangler handles this)
     "isolatedModules": true, // Ensure modules can be transpiled independently
-    "types": ["@cloudflare/workers-types", "bun-types"],
+    "types": ["bun-types"],
     "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*", "worker-configuration.d.ts"], // Include all files within the src directory

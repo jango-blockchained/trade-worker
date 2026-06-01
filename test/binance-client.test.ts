@@ -248,9 +248,10 @@ describe("BinanceClient", () => {
   test("executeTrade (CLOSE_LONG) should call makeRequest with side=SELL and reduceOnly=true", async () => {
     const params = {
       symbol: "BTCUSDT",
-      side: "CLOSE_LONG",
+      side: "SELL",
       orderType: "MARKET",
       quantity: 0.01,
+      reduceOnly: true,
     };
     const makeRequestSpy = spyOn(client as any, "makeRequest");
 
@@ -272,9 +273,10 @@ describe("BinanceClient", () => {
   test("executeTrade (CLOSE_SHORT) should call makeRequest with side=BUY and reduceOnly=true", async () => {
     const params = {
       symbol: "BTCUSDT",
-      side: "CLOSE_SHORT",
+      side: "BUY",
       orderType: "MARKET",
       quantity: 0.01,
+      reduceOnly: true,
     };
     const makeRequestSpy = spyOn(client as any, "makeRequest");
 

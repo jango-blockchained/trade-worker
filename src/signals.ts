@@ -1,5 +1,8 @@
 import type { D1Result } from "@cloudflare/workers-types";
-import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
+import {
+  createLogger,
+  requireInternalAuth,
+} from "@jango-blockchained/hoox-shared/middleware";
 import {
   createErrorResponse,
   createJsonResponse,
@@ -17,6 +20,7 @@ const logger = createLogger({ service: "trade-worker", module: "signals" });
 export interface D1Env {
   D1_SERVICE: Fetcher;
   INTERNAL_KEY_BINDING?: string;
+  [key: string]: unknown;
 }
 
 // Structure for storing trade signals in D1
@@ -136,6 +140,10 @@ export async function handlePostSignalRequest(
   request: Request,
   env: D1Env
 ): Promise<Response> {
+  // Internal authentication check
+  const authResponse = requireInternalAuth(request, env);
+  if (authResponse) return authResponse;
+
   let signalPayload: Record<string, unknown>;
   try {
     signalPayload = (await request.json()) as Record<string, unknown>;
@@ -203,6 +211,10 @@ export async function handleGetSignalsRequest(
   request: Request,
   env: D1Env
 ): Promise<Response> {
+  // Internal authentication check
+  const authResponse = requireInternalAuth(request, env);
+  if (authResponse) return authResponse;
+
   const url = new URL(request.url);
   const limitParam = url.searchParams.get("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : 10;

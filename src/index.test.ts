@@ -180,7 +180,10 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
     it("should return 400 for invalid JSON", async () => {
       const request = new Request("http://localhost/api/signals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Auth-Key": "test-internal-key",
+        },
         body: "{ invalid json,",
       });
 

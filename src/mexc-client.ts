@@ -34,7 +34,7 @@ export class MexcClient extends BaseExchangeClient {
   }
 
   protected getDefaultBaseUrl(): string {
-    return "https://contract.mexc.com"; // Use V1 futures API
+    return "https://contract.mexc.com/api/v1/contract"; // Use V1 futures API
   }
 
   /**
@@ -125,7 +125,7 @@ export class MexcClient extends BaseExchangeClient {
     leverage: number,
     positionSide: string = "BOTH"
   ): Promise<any> {
-    const path = "/api/v1/private/position/change_leverage";
+    const path = "/private/position/change_leverage";
     const params: Record<string, string | number> = {
       symbol: symbol,
       leverage: leverage,
@@ -144,31 +144,30 @@ export class MexcClient extends BaseExchangeClient {
     price?: number;
     reduceOnly?: boolean;
   }): Promise<any> {
-    const path = "/api/v1/private/order/submit";
+    const path = "/private/order/submit";
     const apiParams: Record<string, string | number> = {
       symbol: params.symbol,
       side: 1, // Default to Open Long, will be overridden below if needed
       type: params.orderType?.toUpperCase() === "LIMIT" ? 1 : 2, // 1: Limit, 2: Market
       openType: 1, // 1: Isolated, 2: Cross
       volume: params.quantity, // Quantity
-      // positionId?
-      // reduceOnly?  Need to map this correctly if V1 supports it
     };
 
-    // Handle specific open/close logic based on side
-    if (params.side.toUpperCase() === "CLOSE_LONG") {
-      apiParams.side = 3;
-    } else if (params.side.toUpperCase() === "CLOSE_SHORT") {
-      apiParams.side = 4;
+    // Map exchange-agnostic side names ("BUY"/"SELL") to MEXC V1 futures side values.
+    // BaseExchangeClient helpers send:
+    //   openLong   → side: "BUY"                         → 1 = Open Long
+    //   openShort  → side: "SELL"                        → 2 = Open Short
+    //   closeLong  → side: "SELL", reduceOnly: true      → 3 = Close Long
+    //   closeShort → side: "BUY",  reduceOnly: true      → 4 = Close Short
+    if (params.reduceOnly) {
+      apiParams.side = params.side.toUpperCase() === "SELL" ? 3 : 4;
+    } else {
+      apiParams.side = params.side.toUpperCase() === "SELL" ? 2 : 1;
     }
 
     if (apiParams.type === 1 && params.price) {
       // Only add price for LIMIT orders
       apiParams.price = params.price;
-    }
-
-    if (params.reduceOnly) {
-      this.logger.warn("MEXC V1 API reduceOnly parameter needs verification");
     }
 
     return this.makeRequest<any>("POST", path, apiParams);
@@ -177,12 +176,12 @@ export class MexcClient extends BaseExchangeClient {
   // --- Account Info ---
 
   async getAccountInfo(): Promise<any> {
-    const path = "/api/v1/private/account/assets";
+    const path = "/private/account/assets";
     return this.makeRequest<any>("GET", path);
   }
 
   async getPositions(symbol?: string): Promise<any> {
-    const path = "/api/v1/private/position/list";
+    const path = "/private/position/list";
     const params: Record<string, string> = {};
     if (symbol) {
       params.symbol = symbol;

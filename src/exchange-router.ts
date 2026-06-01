@@ -133,6 +133,26 @@ export class ExchangeRouter implements Pick<
       }
     }
 
+    // Check exchange toggle from CONFIG_KV
+    if (env.CONFIG_KV) {
+      try {
+        const exchangeEnabled = await env.CONFIG_KV.get(
+          `exchange:${exchange}:enabled`
+        );
+        if (exchangeEnabled === "false") {
+          throw new Error(`EXCHANGE_DISABLED: ${exchange} is disabled`);
+        }
+      } catch (e) {
+        // Re-throw EXCHANGE_DISABLED errors, swallow and log KV failures
+        if (e instanceof Error && e.message.startsWith("EXCHANGE_DISABLED")) {
+          throw e;
+        }
+        logger.error("Failed to check exchange toggle from KV", {
+          error: toError(e),
+        });
+      }
+    }
+
     return this.baseRouter.route(exchange, env);
   }
 }

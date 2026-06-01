@@ -48,7 +48,7 @@ Object.defineProperty(globalThis, "crypto", {
 describe("MexcClient (V1 Futures)", () => {
   const API_KEY = "test-mexc-key";
   const API_SECRET = "test-mexc-secret";
-  const BASE_URL = "https://contract.mexc.com";
+  const BASE_URL = "https://contract.mexc.com/api/v1/contract";
 
   let client: MexcClient;
   let fixedTimestamp: number;
@@ -129,7 +129,7 @@ describe("MexcClient (V1 Futures)", () => {
 
   // --- Request Execution Tests ---
   test("makeRequest (GET) should format URL with all params (incl. sig/ts), set headers, and call fetch", async () => {
-    const path = "/api/v1/private/account/assets";
+    const path = "/private/account/assets";
     const params = { currency: "USDT" }; // Example GET param
     const mockResultData = { usdtBalance: 1000 };
     mockFetch.mockResolvedValueOnce(
@@ -177,7 +177,7 @@ describe("MexcClient (V1 Futures)", () => {
   });
 
   test("makeRequest (POST) should include all params (incl. sig/ts) in body, set headers, and call fetch", async () => {
-    const path = "/api/v1/private/order/submit";
+    const path = "/private/order/submit";
     const params = {
       symbol: "ETH_USDT",
       side: 1,
@@ -248,7 +248,7 @@ describe("MexcClient (V1 Futures)", () => {
 
     expect(makeRequestSpy).toHaveBeenCalledWith(
       "POST",
-      "/api/v1/private/position/change_leverage",
+      "/private/position/change_leverage",
       {
         symbol: params.symbol,
         leverage: params.leverage,
@@ -269,7 +269,7 @@ describe("MexcClient (V1 Futures)", () => {
 
     expect(makeRequestSpy).toHaveBeenCalledWith(
       "POST",
-      "/api/v1/private/order/submit",
+      "/private/order/submit",
       {
         symbol: params.symbol,
         side: 1, // Open Long
@@ -297,7 +297,7 @@ describe("MexcClient (V1 Futures)", () => {
 
     expect(makeRequestSpy).toHaveBeenCalledWith(
       "POST",
-      "/api/v1/private/order/submit",
+      "/private/order/submit",
       {
         symbol: params.symbol,
         side: 4, // Close Short
@@ -315,7 +315,7 @@ describe("MexcClient (V1 Futures)", () => {
     await client.getAccountInfo();
     expect(makeRequestSpy).toHaveBeenCalledWith(
       "GET",
-      "/api/v1/private/account/assets"
+      "/private/account/assets"
     );
   });
 
@@ -324,7 +324,7 @@ describe("MexcClient (V1 Futures)", () => {
     await client.getPositions("BTC_USDT");
     expect(makeRequestSpy).toHaveBeenCalledWith(
       "GET",
-      "/api/v1/private/position/list",
+      "/private/position/list",
       { symbol: "BTC_USDT" }
     );
   });
@@ -345,7 +345,7 @@ describe("MexcClient (V1 Futures)", () => {
     );
 
     await expect(
-      (client as any).makeRequest("GET", "/api/v1/private/account/assets")
+      (client as any).makeRequest("GET", "/private/account/assets")
     ).rejects.toThrow(`MEXC API Error (${errorCode}): ${errorMsg}`);
   });
 
@@ -364,7 +364,7 @@ describe("MexcClient (V1 Futures)", () => {
     );
 
     await expect(
-      (client as any).makeRequest("GET", "/api/v1/private/account/assets")
+      (client as any).makeRequest("GET", "/private/account/assets")
     ).rejects.toThrow(`MEXC API Error (${errorCode}): ${errorMsg}`);
   });
 
@@ -373,7 +373,7 @@ describe("MexcClient (V1 Futures)", () => {
     mockFetch.mockRejectedValueOnce(networkError);
 
     await expect(
-      (client as any).makeRequest("GET", "/api/v1/private/account/assets")
+      (client as any).makeRequest("GET", "/private/account/assets")
     ).rejects.toThrow(networkError);
   });
 });

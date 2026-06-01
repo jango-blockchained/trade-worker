@@ -162,18 +162,6 @@ export class BybitClient extends BaseExchangeClient {
       apiParams.reduceOnly = params.reduceOnly;
     }
 
-    // Map actions to side and potentially reduceOnly
-    if (params.side.toUpperCase() === "LONG") apiParams.side = "Buy";
-    if (params.side.toUpperCase() === "SHORT") apiParams.side = "Sell";
-    if (params.side.toUpperCase() === "CLOSE_LONG") {
-      apiParams.side = "Sell";
-      apiParams.reduceOnly = true;
-    }
-    if (params.side.toUpperCase() === "CLOSE_SHORT") {
-      apiParams.side = "Buy";
-      apiParams.reduceOnly = true;
-    }
-
     return this.makeRequest<any>("POST", path, apiParams);
   }
 

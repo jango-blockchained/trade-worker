@@ -125,18 +125,6 @@ export class BinanceClient extends BaseExchangeClient {
       apiParams.reduceOnly = params.reduceOnly;
     }
 
-    // Map LONG/SHORT/CLOSE actions to Binance BUY/SELL sides
-    if (params.side.toUpperCase() === "LONG") apiParams.side = "BUY";
-    if (params.side.toUpperCase() === "SHORT") apiParams.side = "SELL";
-    if (params.side.toUpperCase() === "CLOSE_LONG") {
-      apiParams.side = "SELL";
-      apiParams.reduceOnly = true;
-    }
-    if (params.side.toUpperCase() === "CLOSE_SHORT") {
-      apiParams.side = "BUY";
-      apiParams.reduceOnly = true;
-    }
-
     return this.makeRequest<any>("POST", path, apiParams);
   }
 

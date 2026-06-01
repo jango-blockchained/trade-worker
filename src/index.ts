@@ -23,6 +23,7 @@ import {
 import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
 import { healthCheck } from "@jango-blockchained/hoox-shared/health";
 import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
+import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
 import {
   executeTrade,
   validateApiCredentials,
@@ -46,7 +47,9 @@ import {
 
 // --- Type Definitions ---
 
-export interface Env extends Cloudflare.Env {}
+export interface Env extends Cloudflare.Env {
+  [key: string]: unknown;
+}
 
 // Payload structure for legacy /process requests
 type TradeProcessRequestBody = ProcessRequestBody<WebhookPayload>;
@@ -124,16 +127,9 @@ async function logFailedTrade(
         ],
       };
 
-      await env.D1_SERVICE.fetch(
-        new Request("http://localhost/query", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
-          },
-          body: JSON.stringify(logPayload),
-        })
-      );
+      await serviceFetch(env.D1_SERVICE, "/query", logPayload, {
+        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "" },
+      });
     }
   } catch (error: unknown) {
     logger.error("Failed to log failed trade", { error: toError(error) });
@@ -148,14 +144,14 @@ const logger = createLogger({ service: "trade-worker", module: "router" });
  * Helper: queue R2 report save on successful trade execution.
  * Extracted to avoid duplicating this pattern across webhook + process handlers.
  */
-async function queueReportSave(
+function triggerReportSave(
   tradeResult: TradeExecutionResult,
   payload: WebhookPayload,
   dbLogId: string | null,
   env: Env,
   ctx: ExecutionContext,
   requestId: string | undefined
-): Promise<void> {
+): void {
   if (tradeResult.success) {
     logger.info(`[${requestId}] Trade successful, queueing report save to R2.`);
     ctx.waitUntil(
@@ -349,8 +345,8 @@ async function handleWebhookRequest(
       tradeResult.status ?? (tradeResult.success ? 200 : 500)
     );
 
-    // Queue R2 report save (if trade was successful)
-    await queueReportSave(
+    // Queue R2 report save (if trade was successful) — fire-and-forget
+    triggerReportSave(
       tradeResult,
       validatedPayload,
       dbLogId,
@@ -469,8 +465,8 @@ async function handleProcessRequest(
       tradeResult.status ?? (tradeResult.success ? 200 : 500)
     );
 
-    // Queue R2 report save (if trade was successful)
-    await queueReportSave(
+    // Queue R2 report save (if trade was successful) — fire-and-forget
+    triggerReportSave(
       tradeResult,
       validatedPayload,
       dbLogId,

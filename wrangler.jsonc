@@ -1,0 +1,72 @@
+{
+  "name": "trade-worker",
+  "account_id": "debc6545e63bea36be059cbc82d80ec8",
+  "main": "src/index.ts",
+  "alias": {
+    "@jango-blockchained/hoox-shared/errors": "../../packages/shared/src/errors.ts",
+    "@jango-blockchained/hoox-shared/middleware": "../../packages/shared/src/middleware/index.ts",
+    "@jango-blockchained/hoox-shared/router": "../../packages/shared/src/router.ts",
+    "@jango-blockchained/hoox-shared/types": "../../packages/shared/src/types.ts",
+    "@jango-blockchained/hoox-shared/types/router": "../../packages/shared/src/types/router.ts",
+    "@jango-blockchained/hoox-shared/analytics": "../../packages/shared/src/analytics.ts",
+    "@jango-blockchained/hoox-shared/health": "../../packages/shared/src/health.ts",
+    "@jango-blockchained/hoox-shared/kvKeys": "../../packages/shared/src/kvKeys.ts",
+    "@jango-blockchained/hoox-shared/exchange-client": "../../packages/shared/src/exchange-client.ts"
+  },
+  "compatibility_date": "2026-04-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "placement": {
+    "mode": "smart"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "INTERNAL_KEY_BINDING": "__SECRET__",
+    "MEXC_KEY_BINDING": "__SECRET__",
+    "MEXC_SECRET_BINDING": "__SECRET__",
+    "BINANCE_KEY_BINDING": "__SECRET__",
+    "BINANCE_SECRET_BINDING": "__SECRET__",
+    "BYBIT_KEY_BINDING": "__SECRET__",
+    "BYBIT_SECRET_BINDING": "__SECRET__",
+    "TELEGRAM_INTERNAL_KEY_BINDING": "__SECRET__"
+  },
+  "services": [
+    {
+      "binding": "D1_SERVICE",
+      "service": "d1-worker"
+    },
+    {
+      "binding": "TELEGRAM_SERVICE",
+      "service": "telegram-worker"
+    },
+    {
+      "binding": "ANALYTICS_SERVICE",
+      "service": "analytics-worker"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CONFIG_KV",
+      "id": "c5917667a21745e390ff969f32b1847d"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "REPORTS_BUCKET",
+      "bucket_name": "trade-reports"
+    },
+    {
+      "binding": "SYSTEM_LOGS_BUCKET",
+      "bucket_name": "hoox-system-logs"
+    }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "trade-execution"
+      }
+    ]
+  }
+}

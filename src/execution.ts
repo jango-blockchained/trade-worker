@@ -241,6 +241,27 @@ export async function executeTrade(
   ctx: ExecutionContext
 ): Promise<TradeExecutionResult> {
   try {
+    // --- Kill Switch Check ---
+    if (env.CONFIG_KV) {
+      try {
+        const killSwitch = await env.CONFIG_KV.get("kill_switch");
+        if (killSwitch === "true") {
+          throw new Error(
+            "KILL_SWITCH_ACTIVE: Trading is disabled by kill switch"
+          );
+        }
+      } catch (e) {
+        // Re-throw kill switch errors, swallow and log KV failures
+        if (e instanceof Error && e.message.startsWith("KILL_SWITCH_ACTIVE")) {
+          throw e;
+        }
+        logger.error("Failed to check kill switch from KV", {
+          error: toError(e),
+        });
+      }
+    }
+    // --- End Kill Switch Check ---
+
     const {
       exchange,
       action,
@@ -387,16 +408,18 @@ export async function executeTrade(
       })
     );
 
-    // Send notification via telegram-worker after trade execution
+    // Send notification via telegram-worker after trade execution (non-blocking)
     if (env.TELEGRAM_SERVICE) {
-      await sendTradeNotificationToTelegram(
-        env,
-        result as { success?: boolean; result?: unknown; error?: string },
-        routedExchange,
-        action,
-        quantity,
-        symbol,
-        dbLogId
+      ctx.waitUntil(
+        sendTradeNotificationToTelegram(
+          env,
+          result as { success?: boolean; result?: unknown; error?: string },
+          routedExchange,
+          action,
+          quantity,
+          symbol,
+          dbLogId
+        ).catch((err) => console.error("Send notification failed:", err))
       );
     }
 

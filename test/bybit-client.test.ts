@@ -273,7 +273,7 @@ describe("BybitClient (V5)", () => {
   test("executeTrade (Market Long) should call makeRequest with correct params", async () => {
     const params = {
       symbol: "ETHUSDT",
-      side: "LONG",
+      side: "BUY",
       orderType: "MARKET",
       quantity: 0.5,
     };
@@ -284,20 +284,20 @@ describe("BybitClient (V5)", () => {
     expect(makeRequestSpy).toHaveBeenCalledWith("POST", "/v5/order/create", {
       category: "linear",
       symbol: params.symbol,
-      side: "Buy", // Mapped from LONG
+      side: "Buy", // BUY → Buy
       orderType: "Market",
       qty: String(params.quantity),
-      reduceOnly: undefined,
     });
   });
 
   test("executeTrade (Limit Close Short) should call makeRequest with correct params", async () => {
     const params = {
       symbol: "ETHUSDT",
-      side: "CLOSE_SHORT",
+      side: "BUY",
       orderType: "LIMIT",
       quantity: 0.5,
       price: 2000,
+      reduceOnly: true,
     };
     const makeRequestSpy = spyOn(client as any, "makeRequest");
 
@@ -306,11 +306,11 @@ describe("BybitClient (V5)", () => {
     expect(makeRequestSpy).toHaveBeenCalledWith("POST", "/v5/order/create", {
       category: "linear",
       symbol: params.symbol,
-      side: "Buy", // Mapped from CLOSE_SHORT
+      side: "Buy", // BUY → Buy
       orderType: "Limit",
       qty: String(params.quantity),
       price: String(params.price),
-      reduceOnly: true, // Set for CLOSE_SHORT
+      reduceOnly: true,
     });
   });
 

@@ -1,11 +1,11 @@
 import { describe, expect, test, spyOn } from "bun:test";
 import {
   bufferToHex,
-  BaseExchangeClient,
   type TradeParams,
   type OrderResponse,
   type Position,
 } from "../src/shared/exchange-client.js";
+import { BaseExchangeClient } from "../src/shared/base-exchange-client.js";
 
 // ---------------------------------------------------------------------------
 // bufferToHex tests
@@ -35,25 +35,18 @@ class TestClient extends BaseExchangeClient {
     return "https://test.com";
   }
 
-  protected generateSignature(
-    _params: Record<string, string | number | boolean>
-  ): Promise<string> {
-    return Promise.resolve("sig");
-  }
-
-  protected buildHeaders(
-    _method: string,
-    _path: string,
-    _params?: Record<string, string | number | boolean>
-  ): Headers {
-    return new Headers();
-  }
-
-  setLeverage(_symbol: string, _leverage: number): Promise<void> {
+  setLeverage(_symbol: string, _leverage: number): Promise<unknown> {
     return Promise.resolve();
   }
 
-  executeTrade(params: TradeParams): Promise<OrderResponse> {
+  executeTrade(params: {
+    symbol: string;
+    side: string;
+    orderType: string;
+    quantity: number;
+    price?: number;
+    reduceOnly?: boolean;
+  }): Promise<unknown> {
     return Promise.resolve({
       orderId: "test",
       symbol: params.symbol,
@@ -61,11 +54,11 @@ class TestClient extends BaseExchangeClient {
     });
   }
 
-  getAccountInfo(): Promise<Record<string, unknown>> {
+  getAccountInfo(): Promise<unknown> {
     return Promise.resolve({});
   }
 
-  getPositions(_symbol?: string): Promise<Position[]> {
+  getPositions(_symbol?: string): Promise<unknown> {
     return Promise.resolve([]);
   }
 }
@@ -75,11 +68,7 @@ class TestClient extends BaseExchangeClient {
 // ---------------------------------------------------------------------------
 describe("BaseExchangeClient constructor", () => {
   test("sets apiKey, apiSecret, baseUrl correctly", () => {
-    const client = new TestClient({
-      apiKey: "my-key",
-      apiSecret: "my-secret",
-      baseUrl: "https://custom.com",
-    });
+    const client = new TestClient("my-key", "my-secret", "https://custom.com");
     expect(client).toBeInstanceOf(BaseExchangeClient);
     // Access protected fields via cast for testing
     const c = client as unknown as {
@@ -93,22 +82,19 @@ describe("BaseExchangeClient constructor", () => {
   });
 
   test("throws when apiKey is missing", () => {
-    expect(() => new TestClient({ apiKey: "", apiSecret: "secret" })).toThrow(
+    expect(() => new TestClient("", "secret")).toThrow(
       "API key and secret are required."
     );
   });
 
   test("throws when apiSecret is missing", () => {
-    expect(() => new TestClient({ apiKey: "key", apiSecret: "" })).toThrow(
+    expect(() => new TestClient("key", "")).toThrow(
       "API key and secret are required."
     );
   });
 
   test("uses default baseUrl from getDefaultBaseUrl()", () => {
-    const client = new TestClient({
-      apiKey: "key",
-      apiSecret: "secret",
-    });
+    const client = new TestClient("key", "secret");
     const c = client as unknown as { baseUrl: string };
     expect(c.baseUrl).toBe("https://test.com");
   });
@@ -119,7 +105,7 @@ describe("BaseExchangeClient constructor", () => {
 // ---------------------------------------------------------------------------
 describe("BaseExchangeClient trade methods", () => {
   test("openLong calls executeTrade with side='long'", async () => {
-    const client = new TestClient({ apiKey: "k", apiSecret: "s" });
+    const client = new TestClient("k", "s");
     const spy = spyOn(client, "executeTrade");
 
     const result = await client.openLong("BTCUSDT", 0.5);
@@ -127,7 +113,7 @@ describe("BaseExchangeClient trade methods", () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         symbol: "BTCUSDT",
-        side: "long",
+        side: "BUY",
         quantity: 0.5,
         orderType: "MARKET",
       })
@@ -139,8 +125,8 @@ describe("BaseExchangeClient trade methods", () => {
     });
   });
 
-  test("openShort calls executeTrade with side='short'", async () => {
-    const client = new TestClient({ apiKey: "k", apiSecret: "s" });
+  test("openShort calls executeTrade with side='SELL'", async () => {
+    const client = new TestClient("k", "s");
     const spy = spyOn(client, "executeTrade");
 
     const result = await client.openShort("ETHUSDT", 1.2, 1800, "LIMIT");
@@ -148,7 +134,7 @@ describe("BaseExchangeClient trade methods", () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         symbol: "ETHUSDT",
-        side: "short",
+        side: "SELL",
         quantity: 1.2,
         price: 1800,
         orderType: "LIMIT",
@@ -162,7 +148,7 @@ describe("BaseExchangeClient trade methods", () => {
   });
 
   test("closeLong calls executeTrade with reduceOnly=true", async () => {
-    const client = new TestClient({ apiKey: "k", apiSecret: "s" });
+    const client = new TestClient("k", "s");
     const spy = spyOn(client, "executeTrade");
 
     await client.closeLong("BTCUSDT", 0.3);
@@ -170,15 +156,15 @@ describe("BaseExchangeClient trade methods", () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         symbol: "BTCUSDT",
-        side: "long",
+        side: "SELL",
         quantity: 0.3,
         reduceOnly: true,
       })
     );
   });
 
-  test("closeShort calls executeTrade with side='short' and reduceOnly=true", async () => {
-    const client = new TestClient({ apiKey: "k", apiSecret: "s" });
+  test("closeShort calls executeTrade with side='SELL' and reduceOnly=true", async () => {
+    const client = new TestClient("k", "s");
     const spy = spyOn(client, "executeTrade");
 
     await client.closeShort("SOLUSDT", 5);
@@ -186,7 +172,7 @@ describe("BaseExchangeClient trade methods", () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         symbol: "SOLUSDT",
-        side: "short",
+        side: "BUY",
         quantity: 5,
         reduceOnly: true,
       })

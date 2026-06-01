@@ -19,7 +19,6 @@ dist/
 # Cloudflare Wrangler
 .wrangler/
 wrangler.json
-wrangler.jsonc
 wrangler.toml
 !wrangler.jsonc.example
 

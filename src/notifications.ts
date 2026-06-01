@@ -55,7 +55,7 @@ export async function sendTradeNotificationToTelegram(
     }
     const notificationResponse = await serviceFetch(
       env.TELEGRAM_SERVICE,
-      "/webhook",
+      "/alert",
       telegramPayload,
       { headers }
     );

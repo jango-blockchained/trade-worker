@@ -2,6 +2,7 @@
   "name": "trade-worker",
   "version": "1.0.0",
   "description": "Trade execution service for cryptocurrency exchanges",
+  "license": "MIT",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

@@ -237,7 +237,8 @@ export async function executeTrade(
   env: Env,
   dbLogger: IDbLogger,
   startTime: number,
-  dbLogId: string | null // Changed to string
+  dbLogId: string | null,
+  ctx: ExecutionContext
 ): Promise<TradeExecutionResult> {
   try {
     const {
@@ -378,11 +379,13 @@ export async function executeTrade(
 
     // Track trade analytics (non-blocking)
     const latencyMs = Date.now() - startTime;
-    trackAnalytics(env, "/track/trade", {
-      payload: { exchange: routedExchange, action, symbol, quantity, price },
-      result: { success: true },
-      latencyMs,
-    });
+    ctx.waitUntil(
+      trackAnalytics(env, "/track/trade", {
+        payload: { exchange: routedExchange, action, symbol, quantity, price },
+        result: { success: true },
+        latencyMs,
+      })
+    );
 
     // Send notification via telegram-worker after trade execution
     if (env.TELEGRAM_SERVICE) {
@@ -420,17 +423,19 @@ export async function executeTrade(
 
     // Track failed trade analytics (non-blocking)
     const latencyMs = Date.now() - startTime;
-    trackAnalytics(env, "/track/trade", {
-      payload: {
-        exchange: payload.exchange,
-        action: payload.action,
-        symbol: payload.symbol,
-        quantity: payload.quantity,
-        price: payload.price,
-      },
-      result: { success: false, error: errorMsg },
-      latencyMs,
-    });
+    ctx.waitUntil(
+      trackAnalytics(env, "/track/trade", {
+        payload: {
+          exchange: payload.exchange,
+          action: payload.action,
+          symbol: payload.symbol,
+          quantity: payload.quantity,
+          price: payload.price,
+        },
+        result: { success: false, error: errorMsg },
+        latencyMs,
+      })
+    );
 
     return tradeResult;
   }

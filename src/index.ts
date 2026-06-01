@@ -73,7 +73,8 @@ const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
 
 async function executeTradeFromQueue(
   trade: TradeQueueMessage,
-  env: Env
+  env: Env,
+  ctx: ExecutionContext
 ): Promise<{ success: boolean; result?: unknown; error?: string }> {
   try {
     const payload: WebhookPayload = {
@@ -92,7 +93,8 @@ async function executeTradeFromQueue(
       env,
       dbLogger,
       startTime,
-      null
+      null,
+      ctx
     );
 
     return {
@@ -237,7 +239,7 @@ export default {
 
       try {
         // Execute the trade
-        const result = await executeTradeFromQueue(trade, env);
+        const result = await executeTradeFromQueue(trade, env, ctx);
 
         if (result.success) {
           logger.info(
@@ -339,7 +341,8 @@ async function handleWebhookRequest(
       env,
       dbLogger,
       startTime,
-      dbLogId
+      dbLogId,
+      ctx
     );
     const tradeResponse = createJsonResponse(
       tradeResult,
@@ -458,7 +461,8 @@ async function handleProcessRequest(
       env,
       dbLogger,
       startTime,
-      dbLogId
+      dbLogId,
+      ctx
     );
     const tradeResponse = createJsonResponse(
       tradeResult,

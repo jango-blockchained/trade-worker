@@ -90,7 +90,7 @@ export class BybitProvider implements TradeExchangeProvider {
  */
 export class ExchangeRouter implements Pick<
   IExchangeRouter<IExchangeClient, Env>,
-  "registerProvider" | "route"
+  "registerProvider"
 > {
   private readonly baseRouter = new BaseRouter<IExchangeClient, Env>();
 

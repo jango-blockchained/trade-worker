@@ -48,7 +48,9 @@ vi.spyOn(routerFactories, "createBinanceClient").mockImplementation(
 vi.spyOn(routerFactories, "createBybitClient").mockImplementation(
   () => mockBybitClient
 );
-vi.spyOn(factories, "createDbLogger").mockImplementation(() => mockDbLogger);
+vi.spyOn(factories, "createDbLogger").mockImplementation(
+  () => mockDbLogger as any
+);
 
 // Mock the D1Database methods globally or per suite/test
 const mockRun = vi.fn();
@@ -485,7 +487,12 @@ describe("Trade Worker Helpers", () => {
 
   describe("saveReportToR2", () => {
     const reportData = { tradeId: "123", status: "success" };
-    const payload = { exchange: "mexc", symbol: "BTC_USDT", action: "LONG" };
+    const payload = {
+      exchange: "mexc",
+      symbol: "BTC_USDT",
+      action: "LONG" as const,
+      quantity: 0.01,
+    };
     const dbLogId = "987";
 
     it("should call R2 put with correct key and data", async () => {
@@ -543,11 +550,6 @@ describe("Trade Worker Handlers", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset factory spies for clients and logger
-    routerFactories.createMexcClient.mockClear();
-    routerFactories.createBinanceClient.mockClear();
-    routerFactories.createBybitClient.mockClear();
-    factories.createDbLogger.mockClear();
     Object.values(mockMexcClient).forEach((fn) => fn.mockReset());
     Object.values(mockBinanceClient).forEach((fn) => fn.mockReset());
     Object.values(mockBybitClient).forEach((fn) => fn.mockReset());
@@ -878,7 +880,7 @@ describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
       },
       body: JSON.stringify(validPayload),
     });
-    request.json = async () => validPayload;
+    (request as any).json = async () => validPayload;
 
     const response = await worker.fetch(request, mockEnv, {
       waitUntil: vi.fn(),
@@ -895,7 +897,7 @@ describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
       },
       body: JSON.stringify(validPayload),
     });
-    request.json = async () => validPayload;
+    (request as any).json = async () => validPayload;
 
     const response = await worker.fetch(request, mockEnv, {
       waitUntil: vi.fn(),
@@ -914,7 +916,7 @@ describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
       },
       body: JSON.stringify(invalidPayload),
     });
-    request.json = async () => invalidPayload;
+    (request as any).json = async () => invalidPayload;
 
     const response = await worker.fetch(request, mockEnv, {
       waitUntil: vi.fn(),
@@ -933,7 +935,7 @@ describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
       },
       body: JSON.stringify(validPayload),
     });
-    request.json = async () => validPayload;
+    (request as any).json = async () => validPayload;
 
     const response = await worker.fetch(request, mockEnv, {
       waitUntil: vi.fn(),
@@ -951,7 +953,7 @@ describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
       },
       body: "invalid json",
     });
-    request.json = async () => {
+    (request as any).json = async () => {
       throw new Error("Invalid JSON");
     };
 
@@ -971,7 +973,7 @@ describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
       },
       body: JSON.stringify(validPayload),
     });
-    request.json = async () => validPayload;
+    (request as any).json = async () => validPayload;
 
     const response = await worker.fetch(request, mockEnv, {
       waitUntil: vi.fn(),
@@ -1293,7 +1295,7 @@ describe("Trade Worker - Error Handling", () => {
         quantity: 0.01,
       }),
     });
-    request.json = async () => ({
+    (request as any).json = async () => ({
       exchange: "mexc",
       action: "LONG",
       symbol: "BTC_USDT",

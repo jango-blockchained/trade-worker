@@ -15,6 +15,7 @@ import {
   requireInternalAuth,
 } from "@jango-blockchained/hoox-shared/middleware";
 import { createRouter } from "@jango-blockchained/hoox-shared/router";
+import { createQueueHandler } from "@jango-blockchained/hoox-shared/queue-handler";
 import {
   WebhookPayload,
   WebhookPayloadSchema,
@@ -222,61 +223,30 @@ export default {
     env: Env,
     ctx: ExecutionContext
   ): Promise<void> {
-    logger.info(`[Queue] Received ${batch.messages.length} message(s)`);
-
-    for (const msg of batch.messages) {
-      const trade = msg.body;
-      logger.info(
-        `[Queue] Processing trade: ${trade.requestId} - ${trade.action} ${trade.symbol}`
-      );
-
-      // Get retry count from message metadata
-      const retryCount = msg.attempts || 0;
-
-      try {
-        // Execute the trade
+    const handler = createQueueHandler<TradeQueueMessage>({
+      maxRetries: MAX_RETRIES,
+      backoffDelays: BACKOFF_DELAYS,
+      logger,
+      onMessage: async (trade, attemptNumber) => {
         const result = await executeTradeFromQueue(trade, env, ctx);
-
-        if (result.success) {
-          logger.info(
-            `[Queue] Trade executed successfully: ${trade.requestId}`
-          );
-          // Send notification if configured
-          await sendTradeNotification(trade, env, result);
-        } else {
+        if (!result.success) {
           throw new Error(result.error || "Trade execution failed");
         }
-      } catch (error: unknown) {
-        const errorMsg = toError(error);
-        logger.error(
-          `[Queue] Trade failed: ${trade.requestId}, attempt ${retryCount + 1}, error: ${errorMsg}`
-        );
+        await sendTradeNotification(trade, env, result);
+      },
+      onRetry: (_trade, _attemptNumber, _errorMsg, _delaySeconds) => {
+        // Logging is handled by createQueueHandler internally
+      },
+      onDLQ: async (trade, _attemptNumber, errorMsg) => {
+        await logFailedTrade(trade, errorMsg, env);
+        await sendTradeNotification(trade, env, {
+          success: false,
+          error: errorMsg,
+        });
+      },
+    });
 
-        if (retryCount < MAX_RETRIES) {
-          const delaySeconds =
-            BACKOFF_DELAYS[retryCount] || BACKOFF_DELAYS[MAX_RETRIES - 1];
-          logger.info(
-            `[Queue] Scheduling retry for ${trade.requestId} in ${delaySeconds}s (attempt ${retryCount + 2})`
-          );
-
-          // Re-queue with delay using the message's retry mechanism
-          msg.retry({ delaySeconds });
-        } else {
-          logger.error(
-            `[Queue] Max retries exceeded for ${trade.requestId}, moving to DLQ`
-          );
-
-          // Log failure to D1 for tracking
-          await logFailedTrade(trade, errorMsg, env);
-
-          // Send failure notification
-          await sendTradeNotification(trade, env, {
-            success: false,
-            error: errorMsg,
-          });
-        }
-      }
-    }
+    return await handler(batch);
   },
 };
 

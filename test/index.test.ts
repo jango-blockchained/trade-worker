@@ -7,10 +7,10 @@ import {
   beforeAll,
   jest as vi,
 } from "bun:test";
-import worker, { factories } from "./index";
-import { factories as routerFactories } from "./exchange-router";
-import { validateApiCredentials, validateTradePayload } from "./execution";
-import { saveReportToR2 } from "./reports";
+import worker, { factories } from "../src/index";
+import { factories as routerFactories } from "../src/exchange-router";
+import { validateApiCredentials, validateTradePayload } from "../src/execution";
+import { saveReportToR2 } from "../src/reports";
 
 // --- Mock Exchange Clients ---
 const createMockClient = () => ({

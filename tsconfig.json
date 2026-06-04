@@ -16,6 +16,6 @@
     "isolatedModules": true, // Ensure modules can be transpiled independently
     "types": ["bun-types"]
   },
-  "include": ["src/**/*", "worker-configuration.d.ts"], // Include all files within the src directory
-  "exclude": ["node_modules", "dist", "test"] // Exclude standard folders
+  "include": ["src/**/*", "test/**/*", "worker-configuration.d.ts"], // Include all source and test files
+  "exclude": ["node_modules", "dist"] // Exclude standard folders
 }

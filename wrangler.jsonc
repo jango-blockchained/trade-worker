@@ -22,15 +22,15 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  // NOTE: Secrets must be created via `wrangler secret put <NAME>`.
+  // Never commit actual secret values. These __SECRET__ placeholders
+  // indicate secrets that must be provisioned separately.
   "vars": {
-    "INTERNAL_KEY_BINDING": "__SECRET__",
-    "MEXC_KEY_BINDING": "__SECRET__",
-    "MEXC_SECRET_BINDING": "__SECRET__",
-    "BINANCE_KEY_BINDING": "__SECRET__",
-    "BINANCE_SECRET_BINDING": "__SECRET__",
-    "BYBIT_KEY_BINDING": "__SECRET__",
-    "BYBIT_SECRET_BINDING": "__SECRET__",
-    "TELEGRAM_INTERNAL_KEY_BINDING": "__SECRET__"
+    // Secrets - create via: wrangler secret put INTERNAL_KEY_BINDING
+    // wrangler secret put MEXC_KEY_BINDING && MEXC_SECRET_BINDING
+    // wrangler secret put BINANCE_KEY_BINDING && BINANCE_SECRET_BINDING
+    // wrangler secret put BYBIT_KEY_BINDING && BYBIT_SECRET_BINDING
+    // wrangler secret put TELEGRAM_INTERNAL_KEY_BINDING
   },
   "services": [
     {
@@ -65,7 +65,9 @@
   "queues": {
     "consumers": [
       {
-        "queue": "trade-execution"
+        "queue": "trade-execution",
+        "max_retries": 3,
+        "dead_letter_queue": "trade-execution-dlq"
       }
     ]
   }

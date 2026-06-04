@@ -1,7 +1,7 @@
 // workers/trade-worker/src/binance-client.ts
 
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
-import { BaseExchangeClient } from "./shared/base-exchange-client";
+import { BaseExchangeClient } from "@jango-blockchained/hoox-shared/exchanges";
 
 // Define interfaces for Binance API responses (adjust based on actual API)
 interface BinanceErrorResponse {
@@ -23,6 +23,10 @@ export class BinanceClient extends BaseExchangeClient {
 
   constructor(apiKey: string, apiSecret: string) {
     super(apiKey, apiSecret);
+  }
+
+  protected getErrorMessagePrefix(): string {
+    return "BinanceClient ";
   }
 
   protected getDefaultBaseUrl(): string {

@@ -2,7 +2,7 @@
 
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { Logger } from "@jango-blockchained/hoox-shared/middleware";
-import { BaseExchangeClient } from "./shared/base-exchange-client";
+import { BaseExchangeClient } from "@jango-blockchained/hoox-shared/exchanges";
 
 // Define interfaces for Bybit V5 API responses
 interface BybitBaseResponse {
@@ -36,6 +36,10 @@ export class BybitClient extends BaseExchangeClient {
       service: "trade-worker",
       module: "bybit-client",
     });
+  }
+
+  protected getErrorMessagePrefix(): string {
+    return "BybitClient ";
   }
 
   protected getDefaultBaseUrl(): string {

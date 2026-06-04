@@ -2,7 +2,7 @@
 
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { Logger } from "@jango-blockchained/hoox-shared/middleware";
-import { BaseExchangeClient } from "./shared/base-exchange-client";
+import { BaseExchangeClient } from "@jango-blockchained/hoox-shared/exchanges";
 
 // Define interfaces for MEXC API responses (adjust based on actual API)
 interface MexcSuccessResponse<T> {
@@ -31,6 +31,10 @@ export class MexcClient extends BaseExchangeClient {
       service: "trade-worker",
       module: "mexc-client",
     });
+  }
+
+  protected getErrorMessagePrefix(): string {
+    return "MexcClient ";
   }
 
   protected getDefaultBaseUrl(): string {

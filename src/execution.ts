@@ -117,12 +117,20 @@ export async function updateD1TradeRecords(
       ],
     };
 
+    // Fail closed: if INTERNAL_KEY_BINDING is not configured, don't send the request
+    if (!env.INTERNAL_KEY_BINDING) {
+      logger.error(
+        "INTERNAL_KEY_BINDING not configured, cannot update D1 trade records"
+      );
+      return;
+    }
+
     await Promise.all([
       serviceFetch(env.D1_SERVICE, "/query", tradePayload, {
-        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "" },
+        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING },
       }),
       serviceFetch(env.D1_SERVICE, "/query", posPayload, {
-        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "" },
+        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING },
       }),
     ]);
   } catch (error: unknown) {

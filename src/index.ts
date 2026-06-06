@@ -52,6 +52,51 @@ export interface Env extends Cloudflare.Env {
   [key: string]: unknown;
 }
 
+/**
+ * Shared error handling utility for request handlers.
+ * Centralizes error logging and response creation to avoid duplication.
+ */
+async function handleError(
+  error: unknown,
+  dbLogger: DbLogger,
+  dbLogId: string | null,
+  startTime: number,
+  request: Request,
+  context: string
+): Promise<Response> {
+  const errorMsg = toError(error, `Failed to ${context}`);
+  logger.error(`Error in ${context}`, { error: errorMsg });
+  const response = Errors.internal(errorMsg);
+
+  // Log error response if dbLogId was obtained
+  if (dbLogId !== null) {
+    await dbLogger.logResponse(dbLogId, response, error as any, startTime);
+  } else {
+    // Body already consumed, log URL and method instead
+    try {
+      logger.error("Failed to capture request body after error", {
+        url: request.url,
+        method: request.method,
+      });
+      const fallbackLogId = await dbLogger.logRequest(
+        request,
+        `[body consumed] ${request.url}`
+      );
+      await dbLogger.logResponse(
+        fallbackLogId,
+        response,
+        error as any,
+        startTime
+      );
+    } catch (logError: unknown) {
+      logger.error("Failed to log error response after initial failure", {
+        error: toError(logError),
+      });
+    }
+  }
+  return response;
+}
+
 // Payload structure for legacy /process requests
 type TradeProcessRequestBody = ProcessRequestBody<WebhookPayload>;
 
@@ -90,7 +135,7 @@ async function executeTradeFromQueue(
       leverage: trade.leverage,
     };
 
-    const dbLogger = new DbLogger(env as ExecutionEnv);
+    const dbLogger = factories.createDbLogger(env as ExecutionEnv);
     const startTime = Date.now();
     const tradeResult = await executeTrade(
       payload,
@@ -118,6 +163,14 @@ async function logFailedTrade(
 ): Promise<void> {
   try {
     if (env.D1_SERVICE) {
+      // Fail closed: if INTERNAL_KEY_BINDING is not configured, don't send the request
+      if (!env.INTERNAL_KEY_BINDING) {
+        logger.error(
+          "INTERNAL_KEY_BINDING not configured, cannot log failed trade"
+        );
+        return;
+      }
+
       const logPayload = {
         query: `INSERT INTO system_logs (level, source, message, details) VALUES (?, ?, ?, ?)`,
         params: [
@@ -129,7 +182,7 @@ async function logFailedTrade(
       };
 
       await serviceFetch(env.D1_SERVICE, "/query", logPayload, {
-        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "" },
+        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING },
       });
     }
   } catch (error: unknown) {
@@ -267,6 +320,41 @@ async function handleWebhookRequest(
     request.headers.get("X-Request-ID") || crypto.randomUUID();
 
   try {
+    // Internal authentication check (before body parsing - fail fast)
+    if (!env.INTERNAL_KEY_BINDING) {
+      const response = Errors.internal("Service configuration error");
+      // Log the config error if we can
+      try {
+        dbLogId = await dbLogger.logRequest(
+          request,
+          `[config error] ${request.url}`
+        );
+        await dbLogger.logResponse(dbLogId, response, null, startTime);
+      } catch {
+        // Ignore logging failures for config errors
+      }
+      return response;
+    }
+
+    const authError = requireInternalAuth(request, env, "INTERNAL_KEY_BINDING");
+    if (authError) {
+      logger.warn(
+        `Authentication failed for webhook request ID: ${incomingRequestId}`
+      );
+      // Log auth failure
+      try {
+        dbLogId = await dbLogger.logRequest(
+          request,
+          `[auth failed] ${request.url}`
+        );
+        await dbLogger.logResponse(dbLogId, authError, null, startTime);
+      } catch {
+        // Ignore logging failures for auth errors
+      }
+      return authError;
+    }
+
+    // Parse body after auth check
     const payload: WebhookPayload = await request.json();
     logger.info(`Processing webhook request ID: ${incomingRequestId}`);
     logger.info("Received webhook payload", { payload });
@@ -274,22 +362,6 @@ async function handleWebhookRequest(
     // Assuming logRequest can handle the payload directly and returns a number ID
     // Might need adjustment based on DbLogger implementation
     dbLogId = await dbLogger.logRequest(request, payload);
-
-    if (!env.INTERNAL_KEY_BINDING) {
-      const response = Errors.internal("Service configuration error");
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
-      return response;
-    }
-
-    // Internal authentication check
-    const authError = requireInternalAuth(request, env, "INTERNAL_KEY_BINDING");
-    if (authError) {
-      logger.warn(
-        `Authentication failed for webhook request ID: ${incomingRequestId}`
-      );
-      await dbLogger.logResponse(dbLogId, authError, null, startTime);
-      return authError;
-    }
 
     const validation = validateJson(WebhookPayloadSchema, payload);
     if (!validation.ok) {
@@ -338,33 +410,14 @@ async function handleWebhookRequest(
 
     return tradeResponse;
   } catch (error: unknown) {
-    const errorMsg = toError(error, "Failed to process webhook request");
-    logger.error(`Error in handleWebhookRequest for ID ${incomingRequestId}`, {
-      error: errorMsg,
-    });
-    const response = Errors.internal(errorMsg);
-    // Log error response if dbLogId was obtained
-    if (dbLogId !== null) {
-      await dbLogger.logResponse(dbLogId, response, error as any, startTime);
-    } else {
-      // Body already consumed by request.json() above, log URL and method instead
-      try {
-        logger.error("Failed to capture request body after error", {
-          url: request.url,
-          method: request.method,
-        });
-        dbLogId = await dbLogger.logRequest(
-          request,
-          `[body consumed] ${request.url}`
-        );
-        await dbLogger.logResponse(dbLogId, response, error as any, startTime);
-      } catch (logError: unknown) {
-        logger.error("Failed to log error response after initial failure", {
-          error: toError(logError),
-        });
-      }
-    }
-    return response;
+    return handleError(
+      error,
+      dbLogger,
+      dbLogId,
+      startTime,
+      request,
+      "handleWebhookRequest"
+    );
   }
 }
 
@@ -382,20 +435,40 @@ async function handleProcessRequest(
   let incomingRequestId: string | undefined;
 
   try {
-    // Internal authentication check (before body parsing)
-    const bodyPromise = request.json() as Promise<TradeProcessRequestBody>;
-
+    // Internal authentication check (before body parsing - fail fast)
     if (!env.INTERNAL_KEY_BINDING) {
-      return Errors.internal("Service configuration error");
+      const response = Errors.internal("Service configuration error");
+      // Log the config error if we can
+      try {
+        dbLogId = await dbLogger.logRequest(
+          request,
+          `[config error] ${request.url}`
+        );
+        await dbLogger.logResponse(dbLogId, response, null, startTime);
+      } catch {
+        // Ignore logging failures for config errors
+      }
+      return response;
     }
 
     const authError = requireInternalAuth(request, env, "INTERNAL_KEY_BINDING");
     if (authError) {
       logger.warn(`Authentication failed for request`);
+      // Log auth failure
+      try {
+        dbLogId = await dbLogger.logRequest(
+          request,
+          `[auth failed] ${request.url}`
+        );
+        await dbLogger.logResponse(dbLogId, authError, null, startTime);
+      } catch {
+        // Ignore logging failures for auth errors
+      }
       return authError;
     }
 
-    const data: TradeProcessRequestBody = await bodyPromise;
+    // Parse body after auth check
+    const data: TradeProcessRequestBody = await request.json();
     incomingRequestId = data?.requestId;
 
     logger.info(`Processing /process request ID: ${incomingRequestId}`);
@@ -458,32 +531,13 @@ async function handleProcessRequest(
 
     return tradeResponse;
   } catch (error: unknown) {
-    const errorMsg = toError(error, "Failed to process request");
-    logger.error(`Error in handleProcessRequest for ID ${incomingRequestId}`, {
-      error: errorMsg,
-    });
-    const response = Errors.internal(errorMsg);
-    // Log error response if dbLogId was obtained
-    if (dbLogId !== null) {
-      await dbLogger.logResponse(dbLogId, response, error as any, startTime);
-    } else {
-      // Body already consumed by request.json() above, log URL and method instead
-      try {
-        logger.error("Failed to capture request body after error", {
-          url: request.url,
-          method: request.method,
-        });
-        dbLogId = await dbLogger.logRequest(
-          request,
-          `[body consumed] ${request.url}`
-        );
-        await dbLogger.logResponse(dbLogId, response, error as any, startTime);
-      } catch (logError: unknown) {
-        logger.error("Failed to log error response after initial failure", {
-          error: toError(logError),
-        });
-      }
-    }
-    return response;
+    return handleError(
+      error,
+      dbLogger,
+      dbLogId,
+      startTime,
+      request,
+      "handleProcessRequest"
+    );
   }
 }

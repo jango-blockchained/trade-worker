@@ -1,14 +1,15 @@
 -- workers/trade-worker/schema.sql
-
--- Remove tables if they exist (useful for development/resetting)
-DROP TABLE IF EXISTS trade_signals;
-DROP TABLE IF EXISTS trades;
-DROP TABLE IF EXISTS positions;
-DROP TABLE IF EXISTS balances;
-DROP TABLE IF EXISTS system_logs;
+--
+-- ⚠️  IDEMPOTENT SCHEMA
+-- Uses CREATE TABLE IF NOT EXISTS so running `hoox setup` again will NOT
+-- wipe existing data. If you need to reset during development, run:
+--   for table in trade_signals trades positions balances system_logs; do
+--     wrangler d1 execute trade-data-db --command="DROP TABLE IF EXISTS $table;" --remote
+--   done
+--   wrangler d1 execute trade-data-db --file workers/trade-worker/schema.sql --remote
 
 -- 1. Incoming Signals Tracker
-CREATE TABLE trade_signals (
+CREATE TABLE IF NOT EXISTS trade_signals (
     signal_id TEXT PRIMARY KEY,      -- Unique identifier for the signal (e.g., UUID)
     timestamp INTEGER NOT NULL,      -- Unix timestamp (seconds) of when the signal was generated/received
     symbol TEXT NOT NULL,            -- Trading symbol (e.g., 'BTCUSDT')
@@ -22,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_trade_signals_timestamp ON trade_signals (timesta
 CREATE INDEX IF NOT EXISTS idx_trade_signals_symbol ON trade_signals (symbol);
 
 -- 2. Executed Trades
-CREATE TABLE trades (
+CREATE TABLE IF NOT EXISTS trades (
     id TEXT PRIMARY KEY,             -- Unique identifier for the trade
     signal_id TEXT,                  -- Optional link to the originating signal
     timestamp INTEGER NOT NULL,      -- Unix timestamp
@@ -43,7 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades (symbol);
 CREATE INDEX IF NOT EXISTS idx_trades_status ON trades (status);
 
 -- 3. Active & Closed Positions
-CREATE TABLE positions (
+CREATE TABLE IF NOT EXISTS positions (
     id TEXT PRIMARY KEY,             -- Unique ID, can be derived from exchange+symbol
     exchange TEXT NOT NULL,          
     symbol TEXT NOT NULL,
@@ -62,7 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_positions_status ON positions (status);
 CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions (symbol);
 
 -- 4. Exchange Balances Snapshots
-CREATE TABLE balances (
+CREATE TABLE IF NOT EXISTS balances (
     id TEXT PRIMARY KEY,
     exchange TEXT NOT NULL,
     asset TEXT NOT NULL,             -- e.g., 'USDT'
@@ -75,7 +76,7 @@ CREATE TABLE balances (
 CREATE INDEX IF NOT EXISTS idx_balances_timestamp ON balances (timestamp);
 
 -- 5. System Observability Logs
-CREATE TABLE system_logs (
+CREATE TABLE IF NOT EXISTS system_logs (
     id TEXT PRIMARY KEY,
     timestamp INTEGER DEFAULT (unixepoch()),
     level TEXT NOT NULL,             -- 'INFO', 'WARN', 'ERROR', 'DEBUG'

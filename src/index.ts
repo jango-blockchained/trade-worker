@@ -48,9 +48,7 @@ import {
 
 // --- Type Definitions ---
 
-export interface Env extends Cloudflare.Env {
-  [key: string]: unknown;
-}
+export interface Env extends Cloudflare.Env {}
 
 /**
  * Shared error handling utility for request handlers.

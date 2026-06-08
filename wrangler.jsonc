@@ -13,18 +13,18 @@
     "@jango-blockchained/hoox-shared/kvKeys": "../../packages/shared/src/kvKeys.ts",
     "@jango-blockchained/hoox-shared/exchange-client": "../../packages/shared/src/exchange-client.ts"
   },
-  "compatibility_date": "2026-04-17",
+  "compatibility_date": "2026-06-08",
   "compatibility_flags": ["nodejs_compat"],
   "placement": {
     "mode": "smart"
   },
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
   },
-  // NOTE: Secrets must be created via `wrangler secret put <NAME>`.
-  // Never commit actual secret values. These __SECRET__ placeholders
-  // indicate secrets that must be provisioned separately.
+  // NOTE: All secrets set via `wrangler secret put <NAME>`.
+  // Never commit actual secret values.
   "vars": {
     // Secrets - create via: wrangler secret put INTERNAL_KEY_BINDING
     // wrangler secret put MEXC_KEY_BINDING && MEXC_SECRET_BINDING

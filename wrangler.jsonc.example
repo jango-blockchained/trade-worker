@@ -1,6 +1,6 @@
 {
+  // Trade Worker — multi-exchange execution engine
   "name": "trade-worker",
-  // ACCOUNT_ID: Get from Cloudflare Dashboard > Overview > Account ID
   "account_id": "YOUR_ACCOUNT_ID",
   "main": "src/index.ts",
   "alias": {
@@ -8,40 +8,31 @@
     "@jango-blockchained/hoox-shared/middleware": "../../packages/shared/src/middleware/index.ts",
     "@jango-blockchained/hoox-shared/router": "../../packages/shared/src/router.ts",
     "@jango-blockchained/hoox-shared/types": "../../packages/shared/src/types.ts",
-    "@jango-blockchained/hoox-shared/types/router": "../../packages/shared/src/types/router.ts"
+    "@jango-blockchained/hoox-shared/types/router": "../../packages/shared/src/types/router.ts",
+    "@jango-blockchained/hoox-shared/analytics": "../../packages/shared/src/analytics.ts",
+    "@jango-blockchained/hoox-shared/health": "../../packages/shared/src/health.ts",
+    "@jango-blockchained/hoox-shared/kvKeys": "../../packages/shared/src/kvKeys.ts",
+    "@jango-blockchained/hoox-shared/exchange-client": "../../packages/shared/src/exchange-client.ts"
   },
-  "compatibility_date": "2025-03-07",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
-
-  // PLACEMENT: Smart Placement for reduced latency (free, all plans)
+  "compatibility_date": "2026-06-08",
+  "compatibility_flags": ["nodejs_compat"],
   "placement": {
     "mode": "smart"
   },
-
-  // OBSERVABILITY: Enable logging and sampling
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
   },
-
-  // VARS: Environment variables (secrets set via `wrangler secret put`)
+  // NOTE: All secrets set via `wrangler secret put <NAME>`.
+  // Never commit actual secret values.
   "vars": {
-    // INTERNAL_KEY: Service-to-service authentication
-    "INTERNAL_KEY_BINDING": null,
-    // MEXC_KEY/MEXC_SECRET: MEXC API credentials
-    "MEXC_KEY_BINDING": null,
-    "MEXC_SECRET_BINDING": null,
-    // BINANCE_KEY/BINANCE_SECRET: Binance API credentials
-    "BINANCE_KEY_BINDING": null,
-    "BINANCE_SECRET_BINDING": null,
-    // BYBIT_KEY/BYBIT_SECRET: Bybit API credentials
-    "BYBIT_KEY_BINDING": null,
-    "BYBIT_SECRET_BINDING": null
+    // Secrets - create via: wrangler secret put INTERNAL_KEY_BINDING
+    // wrangler secret put MEXC_KEY_BINDING && MEXC_SECRET_BINDING
+    // wrangler secret put BINANCE_KEY_BINDING && BINANCE_SECRET_BINDING
+    // wrangler secret put BYBIT_KEY_BINDING && BYBIT_SECRET_BINDING
+    // wrangler secret put TELEGRAM_INTERNAL_KEY_BINDING
   },
-
-  // SERVICES: Service bindings to other workers
   "services": [
     {
       "binding": "D1_SERVICE",
@@ -50,66 +41,35 @@
     {
       "binding": "TELEGRAM_SERVICE",
       "service": "telegram-worker"
+    },
+    {
+      "binding": "ANALYTICS_SERVICE",
+      "service": "analytics-worker"
     }
   ],
-
-  // KV_NAMESPACES: Key-Value storage for config
   "kv_namespaces": [
     {
       "binding": "CONFIG_KV",
       "id": "YOUR_CONFIG_KV_ID"
     }
   ],
-
-  // R2_BUCKETS: Object storage for trade reports
-  // BUCKET_NAME: Get from Cloudflare Dashboard > R2 > Manage API
   "r2_buckets": [
     {
       "binding": "REPORTS_BUCKET",
-      // BUCKET_NAME: Your R2 bucket name
-      "bucket_name": "YOUR_REPORTS_BUCKET_NAME"
-    }
-  ],
-
-  // VECTORIZE: AI embeddings index
-  "vectorize": [
+      "bucket_name": "trade-reports"
+    },
     {
-      "binding": "VECTORIZE_INDEX",
-      "index_name": "YOUR_INDEX_NAME"
+      "binding": "SYSTEM_LOGS_BUCKET",
+      "bucket_name": "hoox-system-logs"
     }
   ],
-
-  // AI: Cloudflare Workers AI
-  "ai": {
-    "binding": "AI"
-  },
-
-  // BROWSER: Puppeteer browser for web3 interactions
-  "browser": {
-    "binding": "BROWSER"
-  },
-
-  // QUEUES: Queue consumer for trade execution
   "queues": {
     "consumers": [
       {
-        // QUEUE: Queue name to consume from
-        "queue": "YOUR_TRADE_QUEUE_NAME"
+        "queue": "trade-execution",
+        "max_retries": 3,
+        "dead_letter_queue": "trade-execution-dlq"
       }
     ]
-  },
-
-  // D1_DATABASES: SQLite database for trade data
-  // DATABASE_ID: Get from Cloudflare Dashboard > D1 > Databases
-  "d1_databases": [
-    {
-      "binding": "DB",
-      // DATABASE_NAME: Your D1 database name
-      "database_name": "YOUR_DATABASE_NAME",
-      // DATABASE_ID: Your D1 database ID (UUID)
-      "database_id": "YOUR_DATABASE_ID",
-      // PREVIEW_DATABASE_ID: For local dev with wrangler dev --remote
-      "preview_database_id": "YOUR_DATABASE_ID"
-    }
-  ]
+  }
 }

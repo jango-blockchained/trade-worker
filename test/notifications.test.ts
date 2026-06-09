@@ -5,7 +5,12 @@
 import { describe, test, expect, mock } from "bun:test";
 
 describe("sendTradeNotificationToTelegram", () => {
-  const mockFetch = mock(() => new Response(null, { status: 200 }));
+  // Explicit any-args mock so `mockResolvedValue` and `mockRejectedValue` are
+  // both assignable across tests (the default `mock(...)` infers from the
+  // first call and rejects subsequent re-mocks with different signatures).
+  const mockFetch = mock<(...args: any[]) => any>(
+    () => new Response(null, { status: 200 })
+  );
   const mockEnv = {
     TELEGRAM_SERVICE: { fetch: mockFetch },
     TELEGRAM_INTERNAL_KEY_BINDING: "test-telegram-key",

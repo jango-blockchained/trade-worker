@@ -225,7 +225,7 @@ describe("saveReportToR2", () => {
 
 describe("handleGetReportRequest", () => {
   let mockGet: ReturnType<typeof mock>;
-  let mockBucket: { get: typeof mockGet; put?: typeof mock.mock };
+  let mockBucket: { get: typeof mockGet; put?: ReturnType<typeof mock> };
   let consoleErrorSpy: ReturnType<typeof jest.spyOn>;
   let consoleLogSpy: ReturnType<typeof jest.spyOn>;
 

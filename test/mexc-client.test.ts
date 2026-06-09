@@ -23,7 +23,7 @@ const mockSign: Mock<typeof crypto.subtle.sign> = mock(() =>
 );
 
 // Preserve original crypto to restore after suite (prevents polluting other tests)
-const origCrypto = globalThis.crypto;
+const origCrypto = crypto;
 
 // Mock crypto for Bun's environment — preserves randomUUID to avoid
 // breaking other test suites that depend on it
@@ -104,16 +104,13 @@ describe("MexcClient (V1 Futures)", () => {
   });
 
   // --- Signing Logic Test ---
-  test("generateSignature should create correct HMAC-SHA256 signature string from sorted params", async () => {
+  test("signRequest should create correct HMAC-SHA256 signature string from sorted params", async () => {
     // Params out of order
     const params = { symbol: "BTC_USDT", type: 2, volume: 0.01 };
     const expectedSortedQuery = "symbol=BTC_USDT&type=2&volume=0.01"; // Sorted alphabetically
     const expectedPayload = `${expectedSortedQuery}&timestamp=${fixedTimestamp}`;
 
-    const signature = await (client as any).generateSignature(
-      params,
-      fixedTimestamp
-    );
+    const signature = await (client as any).signRequest(params, fixedTimestamp);
 
     expect(signature).toBe(mockSignatureHex);
     expect(mockImportKey).toHaveBeenCalledTimes(1);

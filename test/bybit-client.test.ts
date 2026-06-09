@@ -24,7 +24,7 @@ const mockSign: Mock<typeof crypto.subtle.sign> = mock(() =>
 );
 
 // Preserve original crypto to restore after suite (prevents polluting other tests)
-const origCrypto = globalThis.crypto;
+const origCrypto = crypto;
 
 // Mock crypto for Bun's environment — preserves randomUUID to avoid
 // breaking other test suites that depend on it
@@ -111,14 +111,14 @@ describe("BybitClient (V5)", () => {
   });
 
   // --- Signing Logic Test ---
-  test("generateSignature should create correct HMAC-SHA256 signature string", async () => {
+  test("signRequest should create correct HMAC-SHA256 signature string", async () => {
     const paramsStr = JSON.stringify({
       symbol: "BTCUSDT",
       orderType: "Market",
     });
     const expectedPayload = `${fixedTimestamp}${API_KEY}${RECV_WINDOW}${paramsStr}`;
 
-    const signature = await (client as any).generateSignature(
+    const signature = await (client as any).signRequest(
       fixedTimestamp,
       paramsStr
     );

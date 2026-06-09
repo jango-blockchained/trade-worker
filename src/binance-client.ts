@@ -36,7 +36,7 @@ export class BinanceClient extends BaseExchangeClient {
   /**
    * Generates HMAC-SHA256 signature for authenticated requests.
    */
-  private async generateSignature(
+  protected async generateSignature(
     params: Record<string, string | number | boolean>
   ): Promise<string> {
     // Binance expects URLSearchParams format for signature

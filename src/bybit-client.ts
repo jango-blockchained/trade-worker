@@ -48,9 +48,11 @@ export class BybitClient extends BaseExchangeClient {
 
   /**
    * Generates HMAC-SHA256 signature for authenticated requests.
-   * Bybit V5 signature: timestamp + apiKey + recvWindow + paramsStr
+   * Bybit V5 signature: timestamp + apiKey + recvWindow + paramsStr.
+   * Renamed from `generateSignature` to avoid clashing with the base
+   * class method of the same name (which has a different signature).
    */
-  private async generateSignature(
+  private async signRequest(
     timestamp: number,
     paramsStr: string
   ): Promise<string> {
@@ -87,7 +89,7 @@ export class BybitClient extends BaseExchangeClient {
       paramsStr = JSON.stringify(params);
     }
 
-    const signature = await this.generateSignature(timestamp, paramsStr);
+    const signature = await this.signRequest(timestamp, paramsStr);
 
     const options: RequestInit = {
       method: method,

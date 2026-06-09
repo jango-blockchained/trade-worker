@@ -13,7 +13,6 @@ import { BinanceClient } from "../src/binance-client.js";
 
 // --- Mocks ---
 const mockFetch = mock(global.fetch);
-// @ts-expect-error - Ignore type mismatch for mock assignment
 global.fetch = mockFetch as any;
 
 const mockImportKey: Mock<typeof crypto.subtle.importKey> = mock(() =>
@@ -24,7 +23,7 @@ const mockSign: Mock<typeof crypto.subtle.sign> = mock(() =>
 );
 
 // Preserve original crypto to restore after suite (prevents polluting other tests)
-const origCrypto = globalThis.crypto;
+const origCrypto = crypto;
 
 // Mock crypto for Bun's environment — preserves randomUUID to avoid
 // breaking other test suites that depend on it

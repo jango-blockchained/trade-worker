@@ -44,8 +44,10 @@ export class MexcClient extends BaseExchangeClient {
   /**
    * Generates HMAC-SHA256 signature for authenticated requests.
    * MEXC expects sorted query params + timestamp in the signature payload.
+   * Renamed from `generateSignature` to avoid clashing with the base
+   * class method of the same name (which has a different signature).
    */
-  private async generateSignature(
+  private async signRequest(
     params: Record<string, string | number>,
     timestamp: number
   ): Promise<string> {
@@ -74,7 +76,7 @@ export class MexcClient extends BaseExchangeClient {
     params: Record<string, string | number> = {}
   ): Promise<T> {
     const timestamp = Date.now();
-    const signature = await this.generateSignature(params, timestamp);
+    const signature = await this.signRequest(params, timestamp);
 
     const allParams = { ...params, timestamp, signature };
 

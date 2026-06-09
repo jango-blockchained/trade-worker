@@ -13,6 +13,7 @@ import {
   withRequestLog,
   validateJson,
   requireInternalAuth,
+  type InternalAuthEnv,
 } from "@jango-blockchained/hoox-shared/middleware";
 import { createRouter } from "@jango-blockchained/hoox-shared/router";
 import { createQueueHandler } from "@jango-blockchained/hoox-shared/queue-handler";
@@ -38,6 +39,7 @@ import {
   getRecentSignals,
   handlePostSignalRequest,
   handleGetSignalsRequest,
+  type D1Env,
 } from "./signals";
 import { saveReportToR2, handleGetReportRequest } from "./reports";
 import {
@@ -229,14 +231,14 @@ router.get(
 router.get(
   SIGNALS_ENDPOINT,
   async (request: Request, env: Env, ctx: ExecutionContext) => {
-    return await handleGetSignalsRequest(request, env);
+    return await handleGetSignalsRequest(request, env as unknown as D1Env);
   }
 );
 
 router.post(
   SIGNALS_ENDPOINT,
   async (request: Request, env: Env, ctx: ExecutionContext) => {
-    return await handlePostSignalRequest(request, env);
+    return await handlePostSignalRequest(request, env as unknown as D1Env);
   }
 );
 
@@ -334,7 +336,11 @@ async function handleWebhookRequest(
       return response;
     }
 
-    const authError = requireInternalAuth(request, env, "INTERNAL_KEY_BINDING");
+    const authError = requireInternalAuth(
+      request,
+      env as unknown as InternalAuthEnv,
+      "INTERNAL_KEY_BINDING"
+    );
     if (authError) {
       logger.warn(
         `Authentication failed for webhook request ID: ${incomingRequestId}`
@@ -449,7 +455,11 @@ async function handleProcessRequest(
       return response;
     }
 
-    const authError = requireInternalAuth(request, env, "INTERNAL_KEY_BINDING");
+    const authError = requireInternalAuth(
+      request,
+      env as unknown as InternalAuthEnv,
+      "INTERNAL_KEY_BINDING"
+    );
     if (authError) {
       logger.warn(`Authentication failed for request`);
       // Log auth failure

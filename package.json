@@ -2,7 +2,7 @@
   "name": "trade-worker",
   "version": "1.0.0",
   "description": "Trade execution service for cryptocurrency exchanges",
-  "license": "MIT",
+  "license": "CC-BY-4.0",
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
@@ -22,5 +22,6 @@
     "bun-types": "^1.3.14",
     "typescript": "^6.0.3",
     "wrangler": "^4.95.0"
-  }
+  },
+  "author": "jango-blockchained"
 }

@@ -50,6 +50,7 @@ import {
 
 // --- Type Definitions ---
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- project-specific Env type, intentionally extends generated Cloudflare.Env without adding members
 export interface Env extends Cloudflare.Env {}
 
 /**

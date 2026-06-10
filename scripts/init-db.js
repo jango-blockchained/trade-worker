@@ -1,11 +1,9 @@
-import { readFileSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
 
 function initDatabase() {
   const environment = process.env.ENVIRONMENT || "local"; // Default to local
   const databaseId = process.env.D1_DATABASE_ID; // Get from environment if needed for remote
-  const workerName = "d1-worker"; // Name of the worker associated with the DB
 
   if (environment === "remote" && !databaseId) {
     console.error(

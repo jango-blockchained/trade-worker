@@ -107,8 +107,13 @@ export class ExchangeRouter implements Pick<
   async route(
     payload: WebhookPayload,
     env: Env
-  ): Promise<{ exchange: string; client: IExchangeClient }> {
+  ): Promise<{
+    exchange: string;
+    client: IExchangeClient;
+    useWebsocketDO?: boolean;
+  }> {
     let exchange = payload.exchange.toLowerCase();
+    let useWebsocketDO = false;
 
     // Check KV for dynamic routing
     if (env.CONFIG_KV) {
@@ -142,6 +147,13 @@ export class ExchangeRouter implements Pick<
         if (exchangeEnabled === "false") {
           throw new Error(`EXCHANGE_DISABLED: ${exchange} is disabled`);
         }
+
+        const useWs = await env.CONFIG_KV.get(
+          `exchange:${exchange}:use_websocket`
+        );
+        if (useWs === "true") {
+          useWebsocketDO = true;
+        }
       } catch (e) {
         // Re-throw EXCHANGE_DISABLED errors, swallow and log KV failures
         if (e instanceof Error && e.message.startsWith("EXCHANGE_DISABLED")) {
@@ -153,6 +165,7 @@ export class ExchangeRouter implements Pick<
       }
     }
 
-    return this.baseRouter.route(exchange, env);
+    const baseResult = this.baseRouter.route(exchange, env);
+    return { ...baseResult, useWebsocketDO };
   }
 }

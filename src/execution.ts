@@ -330,11 +330,13 @@ export async function executeTrade(
 
     let client: IExchangeClient;
     let routedExchange: string;
+    let useWebsocketDO = false;
 
     try {
       const routeResult = await router.route(payload, env);
       client = routeResult.client;
       routedExchange = routeResult.exchange;
+      useWebsocketDO = routeResult.useWebsocketDO || false;
     } catch (error: unknown) {
       const errorMsg = toError(error, `Failed to route exchange: ${exchange}`);
       logger.error(errorMsg);
@@ -352,32 +354,44 @@ export async function executeTrade(
       return result;
     }
 
-    if (client.setLeverage && overriddenLeverage) {
-      try {
-        await client.setLeverage(symbol, overriddenLeverage);
-      } catch (leverageError) {
-        logger.error("Failed to set leverage", {
-          error: toError(leverageError),
-        });
-        // Continue with trade execution even if setting leverage fails
-      }
-    }
-
     let result: unknown;
-    switch (action.toUpperCase()) {
-      case "LONG":
-        result = await client.openLong(symbol, quantity, price, orderType);
-        break;
-      case "SHORT":
-        result = await client.openShort(symbol, quantity, price, orderType);
-        break;
-      case "CLOSE_LONG":
-        result = await client.closeLong(symbol, quantity);
-        break;
-      case "CLOSE_SHORT":
-        result = await client.closeShort(symbol, quantity);
-        break;
-      // No default needed due to validation earlier
+
+    if (useWebsocketDO && env.EXCHANGE_CONNECTION_MANAGER) {
+      logger.info(`Routing trade to DO for ${routedExchange}`);
+      const id = env.EXCHANGE_CONNECTION_MANAGER.idFromName(routedExchange);
+      const stub = env.EXCHANGE_CONNECTION_MANAGER.get(id) as any;
+      const doResult = await stub.executeTrade(payload, env);
+      if (!doResult.success) {
+        throw new Error(doResult.error || "DO execution failed");
+      }
+      result = doResult.result;
+    } else {
+      if (client.setLeverage && overriddenLeverage) {
+        try {
+          await client.setLeverage(symbol, overriddenLeverage);
+        } catch (leverageError) {
+          logger.error("Failed to set leverage", {
+            error: toError(leverageError),
+          });
+          // Continue with trade execution even if setting leverage fails
+        }
+      }
+
+      switch (action.toUpperCase()) {
+        case "LONG":
+          result = await client.openLong(symbol, quantity, price, orderType);
+          break;
+        case "SHORT":
+          result = await client.openShort(symbol, quantity, price, orderType);
+          break;
+        case "CLOSE_LONG":
+          result = await client.closeLong(symbol, quantity);
+          break;
+        case "CLOSE_SHORT":
+          result = await client.closeShort(symbol, quantity);
+          break;
+        // No default needed due to validation earlier
+      }
     }
 
     logger.info("Trade execution successful", { result });

@@ -70,5 +70,19 @@
         "dead_letter_queue": "trade-execution-dlq"
       }
     ]
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "EXCHANGE_CONNECTION_MANAGER",
+        "class_name": "ExchangeConnectionManager"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ExchangeConnectionManager"]
+    }
+  ]
 }

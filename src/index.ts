@@ -47,11 +47,16 @@ import {
   sendTradeNotificationToTelegram,
   TradeQueueMessage,
 } from "./notifications";
+import { ExchangeConnectionManager } from "./exchange-connection-manager";
+
+export { ExchangeConnectionManager };
 
 // --- Type Definitions ---
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- project-specific Env type, intentionally extends generated Cloudflare.Env without adding members
-export interface Env extends Cloudflare.Env {}
+export interface Env extends Cloudflare.Env {
+  EXCHANGE_CONNECTION_MANAGER: DurableObjectNamespace<ExchangeConnectionManager>;
+}
 
 /**
  * Shared error handling utility for request handlers.

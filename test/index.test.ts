@@ -7,6 +7,13 @@ import {
   beforeAll,
   jest as vi,
 } from "bun:test";
+
+mock.module("cloudflare:workers", () => ({
+  DurableObject: class DurableObject {
+    constructor(ctx: any, env: any) {}
+  },
+}));
+
 import worker, { factories } from "../src/index";
 import { factories as routerFactories } from "../src/exchange-router";
 import { validateApiCredentials, validateTradePayload } from "../src/execution";

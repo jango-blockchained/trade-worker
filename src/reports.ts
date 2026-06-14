@@ -108,11 +108,12 @@ export async function handleGetReportRequest(
 
     // Prepare headers for the response
     const headers = new Headers();
-    object.writeHttpMetadata(headers as unknown as Headers);
+    object.writeHttpMetadata(headers);
     headers.set("etag", object.httpEtag);
 
-    // Stream the body back
-    return new Response(object.body as unknown as BodyInit, {
+    // Stream the body back — object.body is ReadableStream | null;
+    // Response constructor accepts ReadableStream | null (null yields empty body)
+    return new Response(object.body, {
       headers,
     });
   } catch (error: unknown) {

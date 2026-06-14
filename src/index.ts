@@ -77,7 +77,8 @@ async function handleError(
 
   // Log error response if dbLogId was obtained
   if (dbLogId !== null) {
-    await dbLogger.logResponse(dbLogId, response, error as any, startTime, ctx);
+    const errObj = error instanceof Error ? error : new Error(toError(error));
+    await dbLogger.logResponse(dbLogId, response, errObj, startTime, ctx);
   } else {
     // Body already consumed, log URL and method instead
     try {
@@ -90,10 +91,11 @@ async function handleError(
         `[body consumed] ${request.url}`,
         ctx
       );
+      const errObj = error instanceof Error ? error : new Error(toError(error));
       await dbLogger.logResponse(
         fallbackLogId,
         response,
-        error as any,
+        errObj,
         startTime,
         ctx
       );

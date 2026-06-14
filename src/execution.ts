@@ -352,7 +352,13 @@ export async function executeTrade(
     if (useWebsocketDO && env.EXCHANGE_CONNECTION_MANAGER) {
       logger.info(`Routing trade to DO for ${routedExchange}`);
       const id = env.EXCHANGE_CONNECTION_MANAGER.idFromName(routedExchange);
-      const stub = env.EXCHANGE_CONNECTION_MANAGER.get(id) as any;
+      // DurableObjectStub is an RPC proxy — cast to access RPC methods
+      const stub = env.EXCHANGE_CONNECTION_MANAGER.get(id) as unknown as {
+        executeTrade(
+          payload: WebhookPayload,
+          env: Env
+        ): Promise<TradeExecutionResult>;
+      };
       const doResult = await stub.executeTrade(payload, env);
       if (!doResult.success) {
         throw new Error(doResult.error || "DO execution failed");

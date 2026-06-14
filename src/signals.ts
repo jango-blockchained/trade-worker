@@ -1,4 +1,3 @@
-import type { D1Result } from "@cloudflare/workers-types";
 import {
   createLogger,
   requireInternalAuth,
@@ -33,7 +32,43 @@ export interface TradeSignalRecord {
   raw_data?: string;
 }
 
+/**
+ * Response shape from d1-worker /query endpoint.
+ * Represents both success and error cases.
+ */
+interface D1ServiceResponse {
+  success: boolean;
+  error?: string;
+  changes?: number;
+  lastRowId?: number;
+  results?: unknown[];
+}
+
 // --- D1 Helper Functions ---
+
+/**
+ * Sends a query to d1-worker via service binding and returns the raw response.
+ */
+async function queryD1(
+  env: D1Env,
+  query: string,
+  params: unknown[] = []
+): Promise<D1ServiceResponse> {
+  const response = await env.D1_SERVICE.fetch("http://internal/query", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
+    },
+    body: JSON.stringify({ query, params }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`D1_SERVICE responded with ${response.status}`);
+  }
+
+  return response.json() as Promise<D1ServiceResponse>;
+}
 
 /**
  * Inserts a trade signal into the D1 database.
@@ -41,7 +76,7 @@ export interface TradeSignalRecord {
 export async function insertSignal(
   signal: TradeSignalRecord,
   env: D1Env
-): Promise<D1Result> {
+): Promise<D1ServiceResponse> {
   if (!env.D1_SERVICE) {
     throw new Error("D1_SERVICE binding not configured.");
   }
@@ -56,36 +91,7 @@ export async function insertSignal(
     signal.raw_data ?? null,
   ];
 
-  const response = await env.D1_SERVICE.fetch("http://internal/query", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
-    },
-    body: JSON.stringify({ query, params }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`D1_SERVICE responded with ${response.status}`);
-  }
-
-  const data = (await response.json()) as {
-    success: boolean;
-    error?: string;
-    changes?: number;
-    lastRowId?: number;
-  };
-  if (!data.success) {
-    return {
-      success: false,
-      error: data.error || "D1 insert failed",
-    } as unknown as D1Result;
-  }
-
-  return {
-    success: true,
-    meta: { changes: data.changes, last_row_id: data.lastRowId },
-  } as unknown as D1Result;
+  return queryD1(env, query, params);
 }
 
 /**
@@ -94,7 +100,7 @@ export async function insertSignal(
 export async function getRecentSignals(
   env: D1Env,
   limit: number = 10
-): Promise<D1Result<TradeSignalRecord>> {
+): Promise<TradeSignalRecord[]> {
   if (!env.D1_SERVICE) {
     throw new Error("D1_SERVICE binding not configured.");
   }
@@ -103,32 +109,12 @@ export async function getRecentSignals(
          ORDER BY processed_at DESC 
          LIMIT ?`;
 
-  const response = await env.D1_SERVICE.fetch("http://internal/query", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
-    },
-    body: JSON.stringify({ query, params: [limit] }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`D1_SERVICE responded with ${response.status}`);
-  }
-
-  const data = (await response.json()) as {
-    success: boolean;
-    error?: string;
-    results?: unknown[];
-  };
+  const data = await queryD1(env, query, [limit]);
   if (!data.success) {
     throw new Error(data.error || "D1 getRecentSignals failed");
   }
 
-  return {
-    success: true,
-    results: data.results,
-  } as unknown as D1Result<TradeSignalRecord>;
+  return (data.results || []) as TradeSignalRecord[];
 }
 
 // --- Request Handlers for D1 ---
@@ -232,10 +218,7 @@ export async function handleGetSignalsRequest(
 
   try {
     const results = await getRecentSignals(env, limit);
-    return createJsonResponse(
-      { success: true, result: results.results || [] },
-      200
-    );
+    return createJsonResponse({ success: true, result: results }, 200);
   } catch (error) {
     logger.error("Error retrieving signals from D1", { error: toError(error) });
     return createJsonResponse(

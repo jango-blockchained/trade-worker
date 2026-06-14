@@ -136,21 +136,18 @@ export class ExchangeRouter implements Pick<
           error: toError(e),
         });
       }
-    }
 
-    // Check exchange toggle from CONFIG_KV
-    if (env.CONFIG_KV) {
+      // Check exchange toggle and websocket mode in parallel
       try {
-        const exchangeEnabled = await env.CONFIG_KV.get(
-          `exchange:${exchange}:enabled`
-        );
+        const [exchangeEnabled, useWs] = await Promise.all([
+          env.CONFIG_KV.get(`exchange:${exchange}:enabled`),
+          env.CONFIG_KV.get(`exchange:${exchange}:use_websocket`),
+        ]);
+
         if (exchangeEnabled === "false") {
           throw new Error(`EXCHANGE_DISABLED: ${exchange} is disabled`);
         }
 
-        const useWs = await env.CONFIG_KV.get(
-          `exchange:${exchange}:use_websocket`
-        );
         if (useWs === "true") {
           useWebsocketDO = true;
         }

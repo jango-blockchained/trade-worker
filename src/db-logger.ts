@@ -38,12 +38,17 @@ interface LoggerEnv {
 
 // Interface defining the DbLogger's capabilities (optional but good practice)
 export interface IDbLogger {
-  logRequest(request: Request, requestBody: unknown): Promise<string | null>;
+  logRequest(
+    request: Request,
+    requestBody: unknown,
+    ctx?: ExecutionContext
+  ): Promise<string | null>;
   logResponse(
     requestId: string | null,
     response: Response,
     error?: Error | null,
-    startTime?: number
+    startTime?: number,
+    ctx?: ExecutionContext
   ): Promise<void>;
 }
 
@@ -78,11 +83,13 @@ export class DbLogger implements IDbLogger {
    * Logs request details to R2.
    * @param request The incoming Request object.
    * @param requestBody The parsed body of the request (can be any type).
+   * @param ctx Optional ExecutionContext for non-blocking R2 puts.
    * @returns The ID of the inserted request log record, or null if disabled/failed.
    */
   async logRequest(
     request: Request,
-    requestBody: unknown
+    requestBody: unknown,
+    ctx?: ExecutionContext
   ): Promise<string | null> {
     if (!this.enabled || !this.env.SYSTEM_LOGS_BUCKET) return null;
 
@@ -135,13 +142,21 @@ export class DbLogger implements IDbLogger {
       const dateStr = new Date().toISOString().split("T")[0];
       const filename = `requests/${dateStr}/${logId}.json`;
 
-      await this.env.SYSTEM_LOGS_BUCKET.put(
+      const putPromise = this.env.SYSTEM_LOGS_BUCKET.put(
         filename,
         JSON.stringify(logPayload, null, 2),
         {
           httpMetadata: { contentType: "application/json" },
         }
       );
+
+      if (ctx) {
+        // Non-blocking: response returns immediately
+        ctx.waitUntil(putPromise);
+      } else {
+        // Backward compatible: await the put
+        await putPromise;
+      }
 
       return logId;
     } catch (error: unknown) {
@@ -156,12 +171,14 @@ export class DbLogger implements IDbLogger {
    * @param response The Response object sent back to the client.
    * @param error Optional error object if the request failed.
    * @param startTime Optional start timestamp (ms) to calculate execution time.
+   * @param ctx Optional ExecutionContext for non-blocking R2 puts.
    */
   async logResponse(
     requestId: string | null,
     response: Response,
     error: Error | null = null,
-    startTime?: number
+    startTime?: number,
+    ctx?: ExecutionContext
   ): Promise<void> {
     if (!this.enabled || !this.env.SYSTEM_LOGS_BUCKET || requestId === null)
       return;
@@ -206,7 +223,7 @@ export class DbLogger implements IDbLogger {
       const dateStr = new Date().toISOString().split("T")[0];
       const filename = `responses/${dateStr}/${requestId}.json`;
 
-      await this.env.SYSTEM_LOGS_BUCKET.put(
+      const putPromise = this.env.SYSTEM_LOGS_BUCKET.put(
         filename,
         JSON.stringify(logPayload, null, 2),
         {
@@ -214,7 +231,15 @@ export class DbLogger implements IDbLogger {
         }
       );
 
-      logger.info("Logged response for request ID", { requestId });
+      if (ctx) {
+        // Non-blocking: response returns immediately
+        ctx.waitUntil(putPromise);
+        logger.info("Logged response for request ID", { requestId });
+      } else {
+        // Backward compatible: await the put
+        await putPromise;
+        logger.info("Logged response for request ID", { requestId });
+      }
     } catch (error: unknown) {
       logger.error("Error logging response via R2", { error });
     }

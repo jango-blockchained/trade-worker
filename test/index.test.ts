@@ -593,16 +593,21 @@ describe("Trade Worker Handlers", () => {
 
       // Check logger init and calls
       expect(factories.createDbLogger).toHaveBeenCalledWith(mockEnv);
-      expect(mockLogRequest).toHaveBeenCalledWith(request, {
-        internalAuthKey: "test-internal-key",
-        payload: validPayload,
-      });
+      expect(mockLogRequest).toHaveBeenCalledWith(
+        request,
+        {
+          internalAuthKey: "test-internal-key",
+          payload: validPayload,
+        },
+        expect.anything()
+      );
       // Response object passed to logResponse might be complex to assert fully
       expect(mockLogResponse).toHaveBeenCalledWith(
         logId,
         expect.any(Response),
         null,
-        startTime
+        startTime,
+        expect.anything()
       );
 
       // Check client init
@@ -697,7 +702,8 @@ describe("Trade Worker Handlers", () => {
         logId,
         expect.any(Response),
         null,
-        expect.any(Number)
+        expect.any(Number),
+        expect.anything()
       );
       expect(mockEnv.REPORTS_BUCKET.put).not.toHaveBeenCalled(); // No report on failure
     });

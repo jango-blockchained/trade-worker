@@ -68,7 +68,8 @@ async function handleError(
   dbLogId: string | null,
   startTime: number,
   request: Request,
-  context: string
+  context: string,
+  ctx?: ExecutionContext
 ): Promise<Response> {
   const errorMsg = toError(error, `Failed to ${context}`);
   logger.error(`Error in ${context}`, { error: errorMsg });
@@ -76,7 +77,7 @@ async function handleError(
 
   // Log error response if dbLogId was obtained
   if (dbLogId !== null) {
-    await dbLogger.logResponse(dbLogId, response, error as any, startTime);
+    await dbLogger.logResponse(dbLogId, response, error as any, startTime, ctx);
   } else {
     // Body already consumed, log URL and method instead
     try {
@@ -86,13 +87,15 @@ async function handleError(
       });
       const fallbackLogId = await dbLogger.logRequest(
         request,
-        `[body consumed] ${request.url}`
+        `[body consumed] ${request.url}`,
+        ctx
       );
       await dbLogger.logResponse(
         fallbackLogId,
         response,
         error as any,
-        startTime
+        startTime,
+        ctx
       );
     } catch (logError: unknown) {
       logger.error("Failed to log error response after initial failure", {
@@ -333,9 +336,10 @@ async function handleWebhookRequest(
       try {
         dbLogId = await dbLogger.logRequest(
           request,
-          `[config error] ${request.url}`
+          `[config error] ${request.url}`,
+          ctx
         );
-        await dbLogger.logResponse(dbLogId, response, null, startTime);
+        await dbLogger.logResponse(dbLogId, response, null, startTime, ctx);
       } catch {
         // Ignore logging failures for config errors
       }
@@ -355,9 +359,10 @@ async function handleWebhookRequest(
       try {
         dbLogId = await dbLogger.logRequest(
           request,
-          `[auth failed] ${request.url}`
+          `[auth failed] ${request.url}`,
+          ctx
         );
-        await dbLogger.logResponse(dbLogId, authError, null, startTime);
+        await dbLogger.logResponse(dbLogId, authError, null, startTime, ctx);
       } catch {
         // Ignore logging failures for auth errors
       }
@@ -367,16 +372,16 @@ async function handleWebhookRequest(
     // Parse body after auth check
     const payload: WebhookPayload = await request.json();
     logger.info(`Processing webhook request ID: ${incomingRequestId}`);
-    logger.info("Received webhook payload", { payload });
+    logger.debug("Received webhook payload", { payload });
 
     // Assuming logRequest can handle the payload directly and returns a number ID
     // Might need adjustment based on DbLogger implementation
-    dbLogId = await dbLogger.logRequest(request, payload);
+    dbLogId = await dbLogger.logRequest(request, payload, ctx);
 
     const validation = validateJson(WebhookPayloadSchema, payload);
     if (!validation.ok) {
       const response = Errors.badRequest(validation.error);
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
+      await dbLogger.logResponse(dbLogId, response, null, startTime, ctx);
       return response;
     }
 
@@ -426,7 +431,8 @@ async function handleWebhookRequest(
       dbLogId,
       startTime,
       request,
-      "handleWebhookRequest"
+      "handleWebhookRequest",
+      ctx
     );
   }
 }
@@ -452,9 +458,10 @@ async function handleProcessRequest(
       try {
         dbLogId = await dbLogger.logRequest(
           request,
-          `[config error] ${request.url}`
+          `[config error] ${request.url}`,
+          ctx
         );
-        await dbLogger.logResponse(dbLogId, response, null, startTime);
+        await dbLogger.logResponse(dbLogId, response, null, startTime, ctx);
       } catch {
         // Ignore logging failures for config errors
       }
@@ -472,9 +479,10 @@ async function handleProcessRequest(
       try {
         dbLogId = await dbLogger.logRequest(
           request,
-          `[auth failed] ${request.url}`
+          `[auth failed] ${request.url}`,
+          ctx
         );
-        await dbLogger.logResponse(dbLogId, authError, null, startTime);
+        await dbLogger.logResponse(dbLogId, authError, null, startTime, ctx);
       } catch {
         // Ignore logging failures for auth errors
       }
@@ -489,19 +497,19 @@ async function handleProcessRequest(
     logger.info("Received standardized request", { data });
 
     // Log the request
-    dbLogId = await dbLogger.logRequest(request, data);
+    dbLogId = await dbLogger.logRequest(request, data, ctx);
 
     const payload = data?.payload;
     if (!payload) {
       const response = Errors.badRequest("Missing payload in request");
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
+      await dbLogger.logResponse(dbLogId, response, null, startTime, ctx);
       return response;
     }
 
     const validation = validateJson(WebhookPayloadSchema, payload);
     if (!validation.ok) {
       const response = Errors.badRequest(validation.error);
-      await dbLogger.logResponse(dbLogId, response, null, startTime);
+      await dbLogger.logResponse(dbLogId, response, null, startTime, ctx);
       return response;
     }
 
@@ -551,7 +559,8 @@ async function handleProcessRequest(
       dbLogId,
       startTime,
       request,
-      "handleProcessRequest"
+      "handleProcessRequest",
+      ctx
     );
   }
 }

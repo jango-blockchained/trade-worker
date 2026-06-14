@@ -249,27 +249,6 @@ export async function executeTrade(
   ctx: ExecutionContext
 ): Promise<TradeExecutionResult> {
   try {
-    // --- Kill Switch Check ---
-    if (env.CONFIG_KV) {
-      try {
-        const killSwitch = await env.CONFIG_KV.get("kill_switch");
-        if (killSwitch === "true") {
-          throw new Error(
-            "KILL_SWITCH_ACTIVE: Trading is disabled by kill switch"
-          );
-        }
-      } catch (e) {
-        // Re-throw kill switch errors, swallow and log KV failures
-        if (e instanceof Error && e.message.startsWith("KILL_SWITCH_ACTIVE")) {
-          throw e;
-        }
-        logger.error("Failed to check kill switch from KV", {
-          error: toError(e),
-        });
-      }
-    }
-    // --- End Kill Switch Check ---
-
     const {
       exchange,
       action,
@@ -280,33 +259,45 @@ export async function executeTrade(
       leverage,
     } = payload;
 
-    // --- Risk Management via CONFIG_KV ---
     let overriddenLeverage = leverage;
     let maxPositionSize: number | null = null;
 
-    try {
-      if (env.CONFIG_KV) {
-        const defaultLevStr = await env.CONFIG_KV.get(
-          KVKeys.KV_TRADE_DEFAULT_LEVERAGE
-        );
+    // --- Kill Switch & Risk Management via CONFIG_KV ---
+    // Read all independent KV keys in parallel
+    if (env.CONFIG_KV) {
+      try {
+        const [killSwitch, defaultLevStr, maxSizeStr] = await Promise.all([
+          env.CONFIG_KV.get("kill_switch"),
+          env.CONFIG_KV.get(KVKeys.KV_TRADE_DEFAULT_LEVERAGE),
+          env.CONFIG_KV.get(KVKeys.KV_TRADE_MAX_POSITION_SIZE),
+        ]);
+
+        if (killSwitch === "true") {
+          throw new Error(
+            "KILL_SWITCH_ACTIVE: Trading is disabled by kill switch"
+          );
+        }
+
         if (defaultLevStr && !overriddenLeverage) {
           overriddenLeverage = parseInt(defaultLevStr, 10);
           logger.info(
             `[Risk Management] Applied default leverage: ${overriddenLeverage}`
           );
         }
-        const maxSizeStr = await env.CONFIG_KV.get(
-          KVKeys.KV_TRADE_MAX_POSITION_SIZE
-        );
         if (maxSizeStr) {
           maxPositionSize = parseFloat(maxSizeStr);
         }
+      } catch (e) {
+        // Re-throw kill switch errors, swallow and log KV failures
+        if (e instanceof Error && e.message.startsWith("KILL_SWITCH_ACTIVE")) {
+          throw e;
+        }
+        logger.error("Failed to fetch trade settings from KV", {
+          error: toError(e),
+        });
       }
-    } catch (error: unknown) {
-      logger.error("Failed to fetch risk management settings from KV", {
-        error: toError(error),
-      });
     }
+    // --- End Kill Switch & Risk Management ---
 
     if (maxPositionSize !== null && quantity > maxPositionSize) {
       const errorMsg = `Trade quantity (${quantity}) exceeds maximum allowed size (${maxPositionSize})`;
@@ -320,7 +311,8 @@ export async function executeTrade(
         dbLogId,
         createJsonResponse(result, 400),
         null,
-        startTime
+        startTime,
+        ctx
       );
       return result;
     }
@@ -349,7 +341,8 @@ export async function executeTrade(
         dbLogId,
         createJsonResponse(result, 400),
         null,
-        startTime
+        startTime,
+        ctx
       );
       return result;
     }
@@ -394,7 +387,7 @@ export async function executeTrade(
       }
     }
 
-    logger.info("Trade execution successful", { result });
+    logger.debug("Trade execution successful", { result });
 
     // Update D1 tables with trade and position data
     if (env.D1_SERVICE) {
@@ -417,7 +410,8 @@ export async function executeTrade(
       dbLogId,
       createJsonResponse(tradeResult),
       null,
-      startTime
+      startTime,
+      ctx
     );
 
     // Track trade analytics (non-blocking)
@@ -441,7 +435,9 @@ export async function executeTrade(
           quantity,
           symbol,
           dbLogId
-        ).catch((err) => console.error("Send notification failed:", err))
+        ).catch((err) =>
+          logger.error("Send notification failed", { error: toError(err) })
+        )
       );
     }
 
@@ -458,7 +454,7 @@ export async function executeTrade(
     // Log failure response, even if dbLogId might be null in edge cases
     if (dbLogger && dbLogId !== null) {
       try {
-        await dbLogger.logResponse(dbLogId, response, null, startTime);
+        await dbLogger.logResponse(dbLogId, response, null, startTime, ctx);
       } catch (logErr) {
         logger.error("Failed to log error response to D1", {
           error: toError(logErr),

@@ -1,6 +1,3 @@
-import { MexcClient } from "./mexc-client";
-import { BinanceClient } from "./binance-client";
-import { BybitClient } from "./bybit-client";
 import { DbLogger } from "./db-logger";
 
 import {
@@ -24,7 +21,6 @@ import {
 } from "@jango-blockchained/hoox-shared/types";
 import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
 import { healthCheck } from "@jango-blockchained/hoox-shared/health";
-import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
 import {
   executeTrade,
@@ -35,8 +31,6 @@ import {
   type IExchangeClient,
 } from "./execution";
 import {
-  insertSignal,
-  getRecentSignals,
   handlePostSignalRequest,
   handleGetSignalsRequest,
   type D1Env,

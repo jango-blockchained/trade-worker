@@ -107,7 +107,7 @@ export class DbLogger implements IDbLogger {
 
       let redactedBody: unknown = requestBody;
       if (typeof requestBody === "object" && requestBody !== null) {
-        redactedBody = { ...(requestBody as Record<string, unknown>) };
+        const bodyRecord = { ...(requestBody as Record<string, unknown>) };
         const sensitiveFields = [
           "internalAuthKey",
           "apiKey",
@@ -116,14 +116,11 @@ export class DbLogger implements IDbLogger {
           "token",
         ];
         for (const field of sensitiveFields) {
-          if (
-            typeof redactedBody === "object" &&
-            redactedBody !== null &&
-            field in redactedBody
-          ) {
-            (redactedBody as Record<string, unknown>)[field] = "[REDACTED]";
+          if (field in bodyRecord) {
+            bodyRecord[field] = "[REDACTED]";
           }
         }
+        redactedBody = bodyRecord;
       }
 
       const logId = crypto.randomUUID();

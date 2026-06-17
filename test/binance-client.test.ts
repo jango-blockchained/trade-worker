@@ -12,7 +12,11 @@ import {
 import { BinanceClient } from "../src/binance-client.js";
 
 // --- Mocks ---
-const mockFetch = mock(global.fetch);
+// Capture the original `fetch` so we can restore it in `afterEach`. Without
+// this, the mock leaks to other test files (e.g. yoga-layout's WASM loader
+// in TUI tests fails with `TypeError: undefined is not an object`).
+const originalFetch = global.fetch;
+const mockFetch = mock(originalFetch);
 global.fetch = mockFetch as any;
 
 const mockImportKey: Mock<typeof crypto.subtle.importKey> = mock(() =>
@@ -56,6 +60,8 @@ describe("BinanceClient", () => {
 
   beforeEach(() => {
     mock.restore(); // Keep bun mock restore
+    // Re-install the fetch mock after mock.restore() removed it
+    global.fetch = mockFetch as any;
     mockFetch.mockClear(); // Add explicit clear
     mockImportKey.mockClear(); // Add explicit clear
     mockSign.mockClear(); // Add explicit clear
@@ -86,8 +92,10 @@ describe("BinanceClient", () => {
   });
 
   afterEach(() => {
-    // Ensure mocks are restored after each test if needed
-    // mock.restore(); // Already in beforeEach, might be redundant unless spies need restoring here
+    // Restore the real `global.fetch` so subsequent test files aren't
+    // polluted with our mock. The beforeEach also calls mock.restore()
+    // but that doesn't undo our module-level `global.fetch = mockFetch`.
+    global.fetch = originalFetch;
   });
 
   // --- Constructor Tests ---

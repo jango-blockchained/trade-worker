@@ -1,6 +1,16 @@
-import { describe, expect, test, spyOn } from "bun:test";
+import {
+  describe,
+  expect,
+  test,
+  spyOn,
+  beforeEach,
+  afterEach,
+  mock,
+  type Mock,
+} from "bun:test";
 import {
   bufferToHex,
+  hmacSign,
   type TradeParams,
   type OrderResponse,
   type Position,
@@ -177,5 +187,106 @@ describe("BaseExchangeClient trade methods", () => {
         reduceOnly: true,
       })
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hmacSign tests — uses crypto.subtle mocks matching binance-client.test.ts
+// ---------------------------------------------------------------------------
+describe("hmacSign", () => {
+  // Mock factories for crypto.subtle (HMAC-SHA256 pipeline).
+  // Typed against the real Web Crypto API to keep signatures honest.
+  const mockImportKey: Mock<typeof crypto.subtle.importKey> = mock(() =>
+    Promise.resolve({} as CryptoKey)
+  );
+  const mockSign: Mock<typeof crypto.subtle.sign> = mock(() =>
+    Promise.resolve(new ArrayBuffer(0))
+  );
+
+  // Preserve the original crypto object so we can restore it in afterEach
+  // and avoid polluting sibling test files (matches binance-client pattern).
+  const origCrypto = crypto;
+
+  beforeEach(() => {
+    // Clear mock state from previous tests
+    mockImportKey.mockClear();
+    mockSign.mockClear();
+
+    // Replace crypto with an object that wires our mocks into subtle,
+    // while preserving other crypto members (randomUUID, getRandomValues…)
+    Object.defineProperty(globalThis, "crypto", {
+      value: {
+        ...origCrypto,
+        subtle: {
+          importKey: mockImportKey,
+          sign: mockSign,
+        },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    // Default mock resolutions — overridden per-test as needed
+    mockImportKey.mockResolvedValue({} as CryptoKey);
+    mockSign.mockResolvedValue(new ArrayBuffer(0));
+  });
+
+  afterEach(() => {
+    // Restore the original crypto object so other test files get a clean slate
+    Object.defineProperty(globalThis, "crypto", {
+      value: origCrypto,
+      writable: true,
+      configurable: true,
+    });
+    // Restore any functions that mock() hijacked (parity with binance pattern)
+    mock.restore();
+  });
+
+  test("returns hex string for a known mock buffer", async () => {
+    // Arrange
+    const mockSignatureArrayBuffer = new Uint8Array([0xde, 0xad, 0xbe, 0xef])
+      .buffer;
+    mockSign.mockResolvedValue(mockSignatureArrayBuffer);
+
+    // Act
+    const result = await hmacSign("my-secret", "payload");
+
+    // Assert
+    expect(result).toBe("deadbeef");
+    expect(mockImportKey).toHaveBeenCalledTimes(1);
+    expect(mockSign).toHaveBeenCalledTimes(1);
+  });
+
+  test("is deterministic — same secret and data produce same output", async () => {
+    // Arrange
+    const mockSignatureArrayBuffer = new Uint8Array([0xab, 0xcd]).buffer;
+    mockSign.mockResolvedValue(mockSignatureArrayBuffer);
+
+    // Act
+    const first = await hmacSign("secret", "data");
+    const second = await hmacSign("secret", "data");
+
+    // Assert
+    expect(first).toBe(second);
+    expect(first).toBe("abcd");
+    expect(mockImportKey).toHaveBeenCalledTimes(2);
+    expect(mockSign).toHaveBeenCalledTimes(2);
+  });
+
+  test("handles various secret lengths (empty, 1-char, 64-char)", async () => {
+    // Arrange — fixed mock output to prove bufferToHex runs end-to-end
+    const mockSignatureArrayBuffer = new Uint8Array([0x01, 0x02]).buffer;
+    mockSign.mockResolvedValue(mockSignatureArrayBuffer);
+    const secrets = ["", "a", "a".repeat(64)];
+
+    for (const secret of secrets) {
+      // Act
+      const result = await hmacSign(secret, "data");
+
+      // Assert — output flows through bufferToHex regardless of secret length
+      expect(result).toBe("0102");
+    }
+    expect(mockImportKey).toHaveBeenCalledTimes(secrets.length);
+    expect(mockSign).toHaveBeenCalledTimes(secrets.length);
   });
 });

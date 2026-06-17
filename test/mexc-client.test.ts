@@ -12,7 +12,12 @@ import {
 import { MexcClient } from "../src/mexc-client.js";
 
 // --- Mocks ---
-const mockFetch = mock(global.fetch);
+// Capture the original `fetch` so we can restore it in `afterEach`.
+// Without this, the mock leaks to other test files (e.g. yoga-layout's
+// WASM loader in TUI tests fails with `TypeError: undefined is not an
+// object`).
+const originalFetch = global.fetch;
+const mockFetch = mock(originalFetch);
 global.fetch = mockFetch as any;
 
 const mockImportKey: Mock<typeof crypto.subtle.importKey> = mock(() =>
@@ -56,6 +61,8 @@ describe("MexcClient (V1 Futures)", () => {
 
   beforeEach(() => {
     mock.restore();
+    // Re-install the fetch mock after mock.restore() removed it
+    global.fetch = mockFetch as any;
     mockFetch.mockClear();
     mockImportKey.mockClear();
     mockSign.mockClear();
@@ -84,6 +91,13 @@ describe("MexcClient (V1 Futures)", () => {
     );
 
     client = new MexcClient(API_KEY, API_SECRET);
+  });
+
+  afterEach(() => {
+    // Restore the real `global.fetch` so subsequent test files aren't
+    // polluted with our mock. The beforeEach also calls mock.restore()
+    // but that doesn't undo our module-level `global.fetch = mockFetch`.
+    global.fetch = originalFetch;
   });
 
   // --- Constructor Tests ---

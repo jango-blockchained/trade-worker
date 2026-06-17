@@ -46,7 +46,7 @@ export class ExchangeConnectionManager extends DurableObject {
 
       this.ws.accept();
 
-      this.ws.addEventListener("message", (event) => {
+      this.ws.addEventListener("message", (_event) => {
         // We receive messages here.
         // Push the alarm forward to keep the DO alive if it goes idle.
         this.ctx.storage.setAlarm(Date.now() + 60 * 1000); // 1 minute

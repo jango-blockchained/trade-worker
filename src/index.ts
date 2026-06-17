@@ -24,11 +24,8 @@ import { healthCheck } from "@jango-blockchained/hoox-shared/health";
 import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
 import {
   executeTrade,
-  validateApiCredentials,
-  updateD1TradeRecords,
   type ExecutionEnv,
   type TradeExecutionResult,
-  type IExchangeClient,
 } from "./execution";
 import {
   handlePostSignalRequest,
@@ -36,18 +33,13 @@ import {
   type D1Env,
 } from "./signals";
 import { saveReportToR2, handleGetReportRequest } from "./reports";
-import {
-  sendTradeNotification,
-  sendTradeNotificationToTelegram,
-  TradeQueueMessage,
-} from "./notifications";
+import { sendTradeNotification, TradeQueueMessage } from "./notifications";
 import { ExchangeConnectionManager } from "./exchange-connection-manager";
 
 export { ExchangeConnectionManager };
 
 // --- Type Definitions ---
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- project-specific Env type, intentionally extends generated Cloudflare.Env without adding members
 export interface Env extends Cloudflare.Env {
   EXCHANGE_CONNECTION_MANAGER: DurableObjectNamespace<ExchangeConnectionManager>;
 }
@@ -228,21 +220,21 @@ const router = createRouter<Env>();
 // Define routes
 router.get(
   "/health",
-  async (request: Request, env: Env, ctx: ExecutionContext) => {
+  async (_request: Request, _env: Env, _ctx: ExecutionContext) => {
     return healthCheck({ worker: "trade-worker" });
   }
 );
 
 router.get(
   SIGNALS_ENDPOINT,
-  async (request: Request, env: Env, ctx: ExecutionContext) => {
+  async (request: Request, env: Env, _ctx: ExecutionContext) => {
     return await handleGetSignalsRequest(request, env as unknown as D1Env);
   }
 );
 
 router.post(
   SIGNALS_ENDPOINT,
-  async (request: Request, env: Env, ctx: ExecutionContext) => {
+  async (request: Request, env: Env, _ctx: ExecutionContext) => {
     return await handlePostSignalRequest(request, env as unknown as D1Env);
   }
 );
@@ -263,7 +255,7 @@ router.post(
 
 router.get(
   "/report",
-  async (request: Request, env: Env, ctx: ExecutionContext) => {
+  async (request: Request, env: Env, _ctx: ExecutionContext) => {
     return await handleGetReportRequest(request, env);
   }
 );
@@ -285,7 +277,7 @@ export default {
       maxRetries: MAX_RETRIES,
       backoffDelays: BACKOFF_DELAYS,
       logger,
-      onMessage: async (trade, attemptNumber) => {
+      onMessage: async (trade, _attemptNumber) => {
         const result = await executeTradeFromQueue(trade, env, ctx);
         if (!result.success) {
           throw new Error(result.error || "Trade execution failed");

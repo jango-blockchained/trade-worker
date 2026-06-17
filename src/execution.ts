@@ -10,10 +10,7 @@ import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
 
 const logger = createLogger({ service: "trade-worker", module: "execution" });
-import {
-  trackAnalytics,
-  type AnalyticsEnv,
-} from "@jango-blockchained/hoox-shared/analytics";
+import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
 import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 import type { IDbLogger } from "./db-logger";
 import { ExchangeRouter, type Env } from "./exchange-router";
@@ -42,23 +39,30 @@ export interface ExecutionEnv {
 
 // Generic client interface (mirrored from index.ts to avoid circular dependency)
 export interface IExchangeClient {
-  getAccountInfo: () => Promise<any>;
-  setLeverage?: (symbol: string, leverage: number) => Promise<any>;
+  getAccountInfo: () => Promise<Record<string, unknown>>;
+  setLeverage?: (symbol: string, leverage: number) => Promise<void>;
   openLong: (
     symbol: string,
     quantity: number,
     price?: number,
     orderType?: string
-  ) => Promise<any>;
+  ) => Promise<unknown>;
   openShort: (
     symbol: string,
     quantity: number,
     price?: number,
     orderType?: string
-  ) => Promise<any>;
-  closeLong: (symbol: string, quantity: number) => Promise<any>;
-  closeShort: (symbol: string, quantity: number) => Promise<any>;
+  ) => Promise<unknown>;
+  closeLong: (symbol: string, quantity: number) => Promise<unknown>;
+  closeShort: (symbol: string, quantity: number) => Promise<unknown>;
 }
+
+// Note: IExchangeClient uses `unknown` for the trade operation return types
+// because each exchange (MEXC, Bybit, Binance) returns a different response
+// shape from its respective REST API. The runtime type is exchange-specific
+// (see mexc-client.ts, bybit-client.ts, binance-client.ts). The base class
+// in @jango-blockchained/hoox-shared/exchanges uses OrderResponse for
+// `executeTrade` and `Position[]` for `getPositions`.
 
 interface ValidationResult {
   isValid: boolean;

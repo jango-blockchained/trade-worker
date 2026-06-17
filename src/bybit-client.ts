@@ -2,7 +2,11 @@
 
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { Logger } from "@jango-blockchained/hoox-shared/middleware";
-import { BaseExchangeClient } from "@jango-blockchained/hoox-shared/exchanges";
+import {
+  BaseExchangeClient,
+  type OrderResponse,
+  type Position,
+} from "@jango-blockchained/hoox-shared/exchanges";
 
 // Define interfaces for Bybit V5 API responses
 interface BybitBaseResponse {
@@ -128,7 +132,7 @@ export class BybitClient extends BaseExchangeClient {
     return (responseData as BybitSuccessResponse<T>).result;
   }
 
-  async setLeverage(symbol: string, leverage: number): Promise<any> {
+  async setLeverage(symbol: string, leverage: number): Promise<void> {
     const path = "/v5/position/set-leverage";
     const params = {
       category: "linear", // Assuming linear perpetual futures
@@ -136,7 +140,7 @@ export class BybitClient extends BaseExchangeClient {
       buyLeverage: String(leverage),
       sellLeverage: String(leverage),
     };
-    return this.makeRequest<any>("POST", path, params);
+    await this.makeRequest<unknown>("POST", path, params);
   }
 
   async executeTrade(params: {
@@ -146,7 +150,7 @@ export class BybitClient extends BaseExchangeClient {
     quantity: number;
     price?: number;
     reduceOnly?: boolean;
-  }): Promise<any> {
+  }): Promise<OrderResponse> {
     const path = "/v5/order/create";
     const apiParams: Record<string, unknown> = {
       category: "linear",
@@ -168,19 +172,19 @@ export class BybitClient extends BaseExchangeClient {
       apiParams.reduceOnly = params.reduceOnly;
     }
 
-    return this.makeRequest<any>("POST", path, apiParams);
+    return this.makeRequest<OrderResponse>("POST", path, apiParams);
   }
 
   // --- Account Info ---
-  async getAccountInfo(): Promise<any> {
+  async getAccountInfo(): Promise<Record<string, unknown>> {
     const path = "/v5/account/wallet-balance";
     const params = {
       accountType: "UNIFIED", // Or CONTRACT if specifically needed
     };
-    return this.makeRequest<any>("GET", path, params);
+    return this.makeRequest<Record<string, unknown>>("GET", path, params);
   }
 
-  async getPositions(symbol?: string): Promise<any> {
+  async getPositions(symbol?: string): Promise<Position[]> {
     const path = "/v5/position/list";
     const params: Record<string, string> = {
       category: "linear",
@@ -188,6 +192,6 @@ export class BybitClient extends BaseExchangeClient {
     if (symbol) {
       params.symbol = symbol;
     }
-    return this.makeRequest<any>("GET", path, params);
+    return this.makeRequest<Position[]>("GET", path, params);
   }
 }

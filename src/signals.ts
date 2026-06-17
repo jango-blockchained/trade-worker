@@ -3,7 +3,6 @@ import {
   requireInternalAuth,
 } from "@jango-blockchained/hoox-shared/middleware";
 import {
-  createErrorResponse,
   createJsonResponse,
   toError,
 } from "@jango-blockchained/hoox-shared/errors";
@@ -133,7 +132,7 @@ export async function handlePostSignalRequest(
   let signalPayload: Record<string, unknown>;
   try {
     signalPayload = (await request.json()) as Record<string, unknown>;
-  } catch (error: unknown) {
+  } catch {
     return createJsonResponse(
       { success: false, error: "Invalid JSON payload" },
       400

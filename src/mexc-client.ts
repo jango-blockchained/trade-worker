@@ -2,7 +2,11 @@
 
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { Logger } from "@jango-blockchained/hoox-shared/middleware";
-import { BaseExchangeClient } from "@jango-blockchained/hoox-shared/exchanges";
+import {
+  BaseExchangeClient,
+  type OrderResponse,
+  type Position,
+} from "@jango-blockchained/hoox-shared/exchanges";
 
 // Define interfaces for MEXC API responses (adjust based on actual API)
 interface MexcSuccessResponse<T> {
@@ -129,14 +133,14 @@ export class MexcClient extends BaseExchangeClient {
   async setLeverage(
     symbol: string,
     leverage: number,
-    positionSide: string = "BOTH"
-  ): Promise<any> {
+    _positionSide: string = "BOTH"
+  ): Promise<void> {
     const path = "/private/position/change_leverage";
     const params: Record<string, string | number> = {
       symbol: symbol,
       leverage: leverage,
     };
-    return this.makeRequest<any>("POST", path, params);
+    await this.makeRequest<unknown>("POST", path, params);
   }
 
   /**
@@ -149,7 +153,7 @@ export class MexcClient extends BaseExchangeClient {
     quantity: number;
     price?: number;
     reduceOnly?: boolean;
-  }): Promise<any> {
+  }): Promise<OrderResponse> {
     const path = "/private/order/submit";
     const apiParams: Record<string, string | number> = {
       symbol: params.symbol,
@@ -176,22 +180,22 @@ export class MexcClient extends BaseExchangeClient {
       apiParams.price = params.price;
     }
 
-    return this.makeRequest<any>("POST", path, apiParams);
+    return this.makeRequest<OrderResponse>("POST", path, apiParams);
   }
 
   // --- Account Info ---
 
-  async getAccountInfo(): Promise<any> {
+  async getAccountInfo(): Promise<Record<string, unknown>> {
     const path = "/private/account/assets";
-    return this.makeRequest<any>("GET", path);
+    return this.makeRequest<Record<string, unknown>>("GET", path);
   }
 
-  async getPositions(symbol?: string): Promise<any> {
+  async getPositions(symbol?: string): Promise<Position[]> {
     const path = "/private/position/list";
     const params: Record<string, string> = {};
     if (symbol) {
       params.symbol = symbol;
     }
-    return this.makeRequest<any>("GET", path, params);
+    return this.makeRequest<Position[]>("GET", path, params);
   }
 }

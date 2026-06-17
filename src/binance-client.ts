@@ -1,7 +1,11 @@
 // workers/trade-worker/src/binance-client.ts
 
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
-import { BaseExchangeClient } from "@jango-blockchained/hoox-shared/exchanges";
+import {
+  BaseExchangeClient,
+  type OrderResponse,
+  type Position,
+} from "@jango-blockchained/hoox-shared/exchanges";
 
 // Define interfaces for Binance API responses (adjust based on actual API)
 interface BinanceErrorResponse {
@@ -98,10 +102,10 @@ export class BinanceClient extends BaseExchangeClient {
     return responseData as T;
   }
 
-  async setLeverage(symbol: string, leverage: number): Promise<any> {
+  async setLeverage(symbol: string, leverage: number): Promise<void> {
     const path = "/fapi/v1/leverage";
     const params = { symbol, leverage };
-    return this.makeRequest<any>("POST", path, params);
+    await this.makeRequest<unknown>("POST", path, params);
   }
 
   async executeTrade(params: {
@@ -111,7 +115,7 @@ export class BinanceClient extends BaseExchangeClient {
     quantity: number;
     price?: number;
     reduceOnly?: boolean;
-  }): Promise<any> {
+  }): Promise<OrderResponse> {
     const path = "/fapi/v1/order";
     const apiParams: Record<string, string | number | boolean> = {
       symbol: params.symbol,
@@ -129,21 +133,21 @@ export class BinanceClient extends BaseExchangeClient {
       apiParams.reduceOnly = params.reduceOnly;
     }
 
-    return this.makeRequest<any>("POST", path, apiParams);
+    return this.makeRequest<OrderResponse>("POST", path, apiParams);
   }
 
   // --- Account Info ---
-  async getAccountInfo(): Promise<any> {
+  async getAccountInfo(): Promise<Record<string, unknown>> {
     const path = "/fapi/v2/account"; // Use v2 for more details potentially
-    return this.makeRequest<any>("GET", path);
+    return this.makeRequest<Record<string, unknown>>("GET", path);
   }
 
-  async getPositions(symbol?: string): Promise<any> {
+  async getPositions(symbol?: string): Promise<Position[]> {
     const path = "/fapi/v2/positionRisk"; // v2 endpoint
     const params: Record<string, string> = {};
     if (symbol) {
       params.symbol = symbol;
     }
-    return this.makeRequest<any>("GET", path, params);
+    return this.makeRequest<Position[]>("GET", path, params);
   }
 }

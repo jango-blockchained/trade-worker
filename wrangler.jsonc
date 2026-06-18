@@ -18,8 +18,12 @@
   "placement": {
     "mode": "smart"
   },
+  "smart_placement": {
+    "enabled": true
+  },
   "observability": {
     "enabled": true,
+    "head_sampling_rate": 1.0,
     "logs": { "enabled": true, "head_sampling_rate": 1 },
     "traces": { "enabled": true, "head_sampling_rate": 0.01 }
   },

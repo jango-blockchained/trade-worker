@@ -149,7 +149,14 @@ export class DbLogger implements IDbLogger {
 
       if (ctx) {
         // Non-blocking: response returns immediately
-        ctx.waitUntil(putPromise);
+        ctx.waitUntil(
+          putPromise.catch((err) =>
+            console.error("R2 put failed", {
+              key: filename,
+              error: String(err),
+            })
+          )
+        );
       } else {
         // Backward compatible: await the put
         await putPromise;
@@ -230,7 +237,14 @@ export class DbLogger implements IDbLogger {
 
       if (ctx) {
         // Non-blocking: response returns immediately
-        ctx.waitUntil(putPromise);
+        ctx.waitUntil(
+          putPromise.catch((err) =>
+            console.error("R2 put failed", {
+              key: filename,
+              error: String(err),
+            })
+          )
+        );
         logger.info("Logged response for request ID", { requestId });
       } else {
         // Backward compatible: await the put

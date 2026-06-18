@@ -408,7 +408,9 @@ async function handleWebhookRequest(
         endpoint: "/webhook",
         latencyMs: webhookLatencyMs,
         success: tradeResult.success,
-      })
+      }).catch((err) =>
+        logger.error("trackAnalytics failed", { error: String(err) })
+      )
     );
 
     return tradeResponse;
@@ -536,7 +538,9 @@ async function handleProcessRequest(
         endpoint: "/process",
         latencyMs: processLatencyMs,
         success: tradeResult.success,
-      })
+      }).catch((err) =>
+        logger.error("trackAnalytics failed", { error: String(err) })
+      )
     );
 
     return tradeResponse;

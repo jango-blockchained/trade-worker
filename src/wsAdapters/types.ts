@@ -41,13 +41,20 @@ export interface IWsAdapter {
   /**
    * Build the outbound string to `ws.send(...)` for a logical request.
    *
+   * Async because some exchanges (Binance) require per-request HMAC-SHA256
+   * signing, and WebCrypto's `crypto.subtle.sign` is promise-based. Adapters
+   * that don't need to sign can simply `return Promise.resolve(envelope)`.
+   *
    * @param method  Logical method name (e.g. `"order.place"`). The adapter
    *                decides how to translate this into its exchange's envelope.
    * @param params  Method parameters. May be signed inside the adapter
    *                using the credentials bound at construction time.
    * @returns       String ready to be passed to `ws.send()`.
    */
-  buildRequest(method: string, params: Record<string, unknown>): string;
+  buildRequest(
+    method: string,
+    params: Record<string, unknown>
+  ): Promise<string>;
 
   /**
    * Parse an inbound WS message.

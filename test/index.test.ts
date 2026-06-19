@@ -2,17 +2,17 @@ import {
   describe,
   it,
   expect,
-  mock,
   beforeEach,
   beforeAll,
   jest as vi,
 } from "bun:test";
 
-mock.module("cloudflare:workers", () => ({
-  DurableObject: class DurableObject {
-    constructor(ctx: any, env: any) {}
-  },
-}));
+// `cloudflare:workers` is mocked globally by
+// `packages/test-utils/src/setup.ts` (loaded via bunfig.toml `preload`).
+// The mock there provides a `DurableObject` base class with `ctx` and
+// `state` properties; do NOT re-mock it here (static-import hoisting
+// would cause the import resolution to run before this mock takes
+// effect, producing `Cannot find package 'cloudflare:workers'`).
 
 import worker, { factories } from "../src/index";
 import { factories as routerFactories } from "../src/exchange-router";

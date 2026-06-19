@@ -2,6 +2,8 @@ import { DurableObject } from "cloudflare:workers";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { Env } from "./index";
 import { BinanceClient } from "./binance-client";
+import { BybitClient } from "./bybit-client";
+import { MexcClient } from "./mexc-client";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
 import type { TradeExecutionResult } from "./execution";
 import { getAdapter } from "./wsAdapters/adapters";
@@ -288,20 +290,22 @@ export class ExchangeConnectionManager extends DurableObject {
   }
 
   /**
-   * Construct the REST client for this exchange. Only Binance is wired
-   * today; the bybit/mexc REST clients exist in the worker but are
-   * not yet wired here. For those exchanges, WS is the only path —
-   * if the WS is down, the call returns a 400 instructing the operator
-   * to use the WS path. Wiring the bybit/mexc REST clients is a
-   * follow-up.
+   * Construct the REST client for this exchange. Each supported
+   * exchange has a dedicated REST client in this worker; this
+   * factory selects the right one based on `this.exchange`.
+   * Returns `null` for unknown exchanges.
    */
   private createRestClient(
     apiKey: string,
     apiSecret: string
-  ): BinanceClient | null {
+  ): BinanceClient | BybitClient | MexcClient | null {
     switch (this.exchange) {
       case "binance":
         return new BinanceClient(apiKey, apiSecret);
+      case "bybit":
+        return new BybitClient(apiKey, apiSecret);
+      case "mexc":
+        return new MexcClient(apiKey, apiSecret);
       default:
         return null;
     }

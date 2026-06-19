@@ -129,7 +129,7 @@ function createMockCtx() {
         alarms.push(scheduledTime);
       },
     },
-    id: { name: "test-do", toString: () => "test-do-id" },
+    id: { name: "exchange:binance", toString: () => "exchange:binance-id" },
     waitUntil: (promise: Promise<unknown>) => {
       lastPromise = promise;
     },

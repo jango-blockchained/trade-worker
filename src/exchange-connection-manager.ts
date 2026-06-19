@@ -4,6 +4,8 @@ import type { Env } from "./index";
 import { BinanceClient } from "./binance-client";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
 import type { TradeExecutionResult } from "./execution";
+import { getAdapter } from "./wsAdapters/adapters";
+import type { IWsAdapter } from "./wsAdapters/types";
 
 const logger = createLogger({
   service: "trade-worker",
@@ -14,30 +16,57 @@ export class ExchangeConnectionManager extends DurableObject {
   private ws: WebSocket | null = null;
   private isConnecting = false;
   private exchange: string;
+  private adapter: IWsAdapter | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.exchange = "binance"; // Hardcoded for now, can be dynamic based on DO name/id
+    this.exchange = this.deriveExchange(ctx);
+
+    // Load the configured adapter for this exchange, if creds are available.
+    const apiKey = readApiKey(env, this.exchange);
+    const apiSecret = readApiSecret(env, this.exchange);
+    if (apiKey && apiSecret) {
+      this.adapter = getAdapter(this.exchange, { apiKey, apiSecret });
+      if (!this.adapter) {
+        logger.warn(
+          `No WS adapter registered for "${this.exchange}"; DO is REST-only`
+        );
+      }
+    } else {
+      logger.warn(`Missing ${this.exchange} credentials; DO is REST-only`);
+    }
 
     // Kick off connection in background
     this.ctx.waitUntil(this.connectToExchange());
   }
 
+  /**
+   * Derive the exchange name from the DO's id name.
+   * Caller is expected to use `idFromName("exchange:<name>")`.
+   * Falls back to "binance" if the id name doesn't match the pattern
+   * (backward compat for tests / accidental raw ids).
+   */
+  private deriveExchange(ctx: DurableObjectState): string {
+    const name = ctx.id.name ?? "";
+    const m = name.match(/^exchange:(.+)$/);
+    return m ? m[1] : "binance";
+  }
+
   async connectToExchange() {
     if (this.ws || this.isConnecting) return;
+    if (!this.adapter) {
+      logger.info(`No adapter for ${this.exchange}; skipping WS connect`);
+      return;
+    }
     this.isConnecting = true;
 
     try {
-      logger.info(`Connecting to ${this.exchange} WebSocket...`);
-
-      // Example: Connect to Binance Futures public stream just to keep connection alive
-      // In a real scenario, this would be the authenticated user data stream or WS API
-      const resp = await fetch(
-        "wss://fstream.binance.com/ws/btcusdt@bookTicker",
-        {
-          headers: { Upgrade: "websocket" },
-        }
+      logger.info(
+        `Connecting to ${this.exchange} WebSocket at ${this.adapter.url}`
       );
+      const resp = await fetch(this.adapter.url, {
+        headers: { Upgrade: "websocket" },
+      });
 
       this.ws = resp.webSocket;
       if (!this.ws) {
@@ -69,13 +98,13 @@ export class ExchangeConnectionManager extends DurableObject {
       this.isConnecting = false;
 
       // Set initial alarm
-      this.ctx.storage.setAlarm(Date.now() + 60 * 1000);
+      this.ctx.storage.setAlarm(Date.now() + 60_000);
     } catch (err) {
       logger.error(`Failed to connect to ${this.exchange} WebSocket`, {
         error: err,
       });
       this.isConnecting = false;
-      this.ctx.storage.setAlarm(Date.now() + 10000); // Try again in 10s
+      this.ctx.storage.setAlarm(Date.now() + 10_000); // Try again in 10s
     }
   }
 
@@ -85,7 +114,7 @@ export class ExchangeConnectionManager extends DurableObject {
       await this.connectToExchange();
     } else {
       // We are connected, just push the alarm forward
-      this.ctx.storage.setAlarm(Date.now() + 60 * 1000);
+      this.ctx.storage.setAlarm(Date.now() + 60_000);
     }
   }
 
@@ -143,5 +172,37 @@ export class ExchangeConnectionManager extends DurableObject {
       const msg = error instanceof Error ? error.message : String(error);
       return { success: false, error: msg, status: 500 };
     }
+  }
+}
+
+/**
+ * Read the API key env binding for the given exchange.
+ * Returns "" if the binding is missing.
+ */
+function readApiKey(env: Env, exchange: string): string {
+  switch (exchange) {
+    case "bybit":
+      return env.BYBIT_KEY_BINDING ?? "";
+    case "mexc":
+      return env.MEXC_KEY_BINDING ?? "";
+    case "binance":
+    default:
+      return env.BINANCE_KEY_BINDING ?? "";
+  }
+}
+
+/**
+ * Read the API secret env binding for the given exchange.
+ * Returns "" if the binding is missing.
+ */
+function readApiSecret(env: Env, exchange: string): string {
+  switch (exchange) {
+    case "bybit":
+      return env.BYBIT_SECRET_BINDING ?? "";
+    case "mexc":
+      return env.MEXC_SECRET_BINDING ?? "";
+    case "binance":
+    default:
+      return env.BINANCE_SECRET_BINDING ?? "";
   }
 }

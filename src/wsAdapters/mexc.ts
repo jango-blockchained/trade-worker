@@ -15,8 +15,11 @@ import type { IWsAdapter, WsResponse } from "./types";
 export class MexcAdapter implements IWsAdapter {
   readonly url = "wss://contract.mexc.com/edge";
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  constructor(private readonly creds: { apiKey: string; apiSecret: string }) {}
+  constructor(private readonly creds: { apiKey: string; apiSecret: string }) {
+    // Reference creds to silence "unused private field" lints; the field
+    // exists for interface conformance and future per-request signing.
+    void this.creds;
+  }
 
   async buildRequest(
     method: string,

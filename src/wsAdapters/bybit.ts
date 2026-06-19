@@ -17,8 +17,11 @@ export class BybitAdapter implements IWsAdapter {
   // Creds are accepted for interface conformance (signing is done at
   // connect time, not per request). Stored for future use if per-request
   // signing becomes necessary.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  constructor(private readonly creds: { apiKey: string; apiSecret: string }) {}
+  constructor(private readonly creds: { apiKey: string; apiSecret: string }) {
+    // Reference creds to silence "unused private field" lints; the field
+    // exists for interface conformance and future per-request signing.
+    void this.creds;
+  }
 
   async buildRequest(
     method: string,

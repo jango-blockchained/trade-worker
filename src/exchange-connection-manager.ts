@@ -17,6 +17,15 @@ export class ExchangeConnectionManager extends DurableObject {
   private isConnecting = false;
   private exchange: string;
   private adapter: IWsAdapter | undefined;
+  private ready = false;
+  private pending = new Map<
+    string,
+    {
+      resolve: (v: unknown) => void;
+      reject: (e: unknown) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -74,24 +83,66 @@ export class ExchangeConnectionManager extends DurableObject {
       }
 
       this.ws.accept();
+      this.ready = true;
 
-      this.ws.addEventListener("message", (_event) => {
-        // We receive messages here.
-        // Push the alarm forward to keep the DO alive if it goes idle.
-        this.ctx.storage.setAlarm(Date.now() + 60 * 1000); // 1 minute
+      this.ws.addEventListener("message", (event) => {
+        // Keep the DO alive on any incoming message (responses AND push
+        // events from user data streams). The connection's overall
+        // activity — not just our request/response traffic — proves
+        // the DO is in use.
+        this.ctx.storage.setAlarm(Date.now() + 60_000);
+
+        const raw =
+          typeof event === "object" && event !== null && "data" in event
+            ? String((event as { data: unknown }).data)
+            : String(event);
+        const parsed = this.adapter!.parseResponse(raw);
+        if (!parsed) return; // push event, ignore for request correlation
+        const entry = this.pending.get(parsed.id);
+        if (!entry) return;
+        this.pending.delete(parsed.id);
+        clearTimeout(entry.timer);
+        if (parsed.error) {
+          entry.reject(new Error(`${parsed.error.code}: ${parsed.error.msg}`));
+        } else {
+          entry.resolve(parsed.result);
+        }
       });
 
       this.ws.addEventListener("close", () => {
         logger.warn(`${this.exchange} WebSocket closed`);
         this.ws = null;
+        this.ready = false;
         this.isConnecting = false;
         this.ctx.storage.setAlarm(Date.now() + 5000); // Reconnect in 5s
+
+        // Defer pending rejections to the next macrotask so callers have
+        // a chance to attach `.catch`/await before the rejection is
+        // observed. setTimeout (not queueMicrotask) so it runs AFTER
+        // any synchronous code that follows the close event, including
+        // the test's `await expect(...)`.
+        setTimeout(() => {
+          for (const [, entry] of this.pending) {
+            clearTimeout(entry.timer);
+            entry.reject(new Error("WS closed"));
+          }
+          this.pending.clear();
+        }, 0);
       });
 
       this.ws.addEventListener("error", (error) => {
         logger.error(`${this.exchange} WebSocket error`, { error });
         this.ws = null;
+        this.ready = false;
         this.isConnecting = false;
+
+        setTimeout(() => {
+          for (const [, entry] of this.pending) {
+            clearTimeout(entry.timer);
+            entry.reject(new Error("WS error"));
+          }
+          this.pending.clear();
+        }, 0);
       });
 
       logger.info(`Connected to ${this.exchange} WebSocket`);
@@ -106,6 +157,44 @@ export class ExchangeConnectionManager extends DurableObject {
       this.isConnecting = false;
       this.ctx.storage.setAlarm(Date.now() + 10_000); // Try again in 10s
     }
+  }
+
+  /**
+   * Send a request over the held WebSocket and await the matching response.
+   *
+   * @throws if the WS is not connected, if the request times out, or if the
+   *         exchange returns an error response.
+   */
+  async request(
+    method: string,
+    params: Record<string, unknown>,
+    timeoutMs = 5_000
+  ): Promise<unknown> {
+    if (!this.ws) throw new Error("WS not connected");
+    if (!this.adapter) throw new Error(`No adapter for ${this.exchange}`);
+
+    const envelope = await this.adapter.buildRequest(method, params);
+    // Extract the correlation id (Binance/MEXC use `id`, Bybit uses `reqId`).
+    const parsed = JSON.parse(envelope) as Record<string, unknown>;
+    const key = (parsed.id ?? parsed.reqId) as string | undefined;
+    if (typeof key !== "string") {
+      throw new Error("Adapter produced no correlation id");
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(key);
+        reject(new Error(`WS ${method} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      this.pending.set(key, { resolve, reject, timer });
+      try {
+        this.ws!.send(envelope);
+      } catch (err) {
+        this.pending.delete(key);
+        clearTimeout(timer);
+        reject(err);
+      }
+    });
   }
 
   async alarm() {

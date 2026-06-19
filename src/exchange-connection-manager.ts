@@ -111,38 +111,27 @@ export class ExchangeConnectionManager extends DurableObject {
 
       this.ws.addEventListener("close", () => {
         logger.warn(`${this.exchange} WebSocket closed`);
+        for (const [, entry] of this.pending) {
+          clearTimeout(entry.timer);
+          entry.reject(new Error("WS closed"));
+        }
+        this.pending.clear();
         this.ws = null;
         this.ready = false;
         this.isConnecting = false;
         this.ctx.storage.setAlarm(Date.now() + 5000); // Reconnect in 5s
-
-        // Defer pending rejections to the next macrotask so callers have
-        // a chance to attach `.catch`/await before the rejection is
-        // observed. setTimeout (not queueMicrotask) so it runs AFTER
-        // any synchronous code that follows the close event, including
-        // the test's `await expect(...)`.
-        setTimeout(() => {
-          for (const [, entry] of this.pending) {
-            clearTimeout(entry.timer);
-            entry.reject(new Error("WS closed"));
-          }
-          this.pending.clear();
-        }, 0);
       });
 
       this.ws.addEventListener("error", (error) => {
         logger.error(`${this.exchange} WebSocket error`, { error });
+        for (const [, entry] of this.pending) {
+          clearTimeout(entry.timer);
+          entry.reject(new Error("WS error"));
+        }
+        this.pending.clear();
         this.ws = null;
         this.ready = false;
         this.isConnecting = false;
-
-        setTimeout(() => {
-          for (const [, entry] of this.pending) {
-            clearTimeout(entry.timer);
-            entry.reject(new Error("WS error"));
-          }
-          this.pending.clear();
-        }, 0);
       });
 
       logger.info(`Connected to ${this.exchange} WebSocket`);
@@ -212,24 +201,59 @@ export class ExchangeConnectionManager extends DurableObject {
     payload: WebhookPayload,
     env: Env
   ): Promise<TradeExecutionResult> {
-    logger.info(`Executing trade via DO for ${this.exchange}`, { payload });
+    // Try the WS path first if the connection is ready.
+    if (this.ready && this.ws && this.adapter) {
+      try {
+        const params: Record<string, unknown> = {
+          symbol: payload.symbol,
+          side: payload.action.toUpperCase(),
+          type: payload.orderType ?? "MARKET",
+          quantity: payload.quantity,
+          price: payload.price,
+        };
+        const result = await this.request(
+          `${this.exchange}.order.place`,
+          params
+        );
+        return { success: true, result, status: 200 };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn(`WS execution failed, falling back to REST: ${msg}`);
+        // fall through to REST
+      }
+    }
+    return this.executeTradeRest(payload, env);
+  }
 
-    // For now, we still use the REST client for execution,
-    // but we are doing it from within the "always online" DO.
-    // Later, this can be upgraded to use WS order placement.
+  /**
+   * REST path. Used as the fallback when WS is not connected, and as the
+   * primary path for exchanges that don't yet have a WS adapter.
+   */
+  private async executeTradeRest(
+    payload: WebhookPayload,
+    env: Env
+  ): Promise<TradeExecutionResult> {
+    logger.info(`Executing trade via REST for ${this.exchange}`, { payload });
 
-    const apiKey = env.BINANCE_KEY_BINDING;
-    const apiSecret = env.BINANCE_SECRET_BINDING;
+    const apiKey = readApiKey(env, this.exchange);
+    const apiSecret = readApiSecret(env, this.exchange);
 
     if (!apiKey || !apiSecret) {
       return {
         success: false,
-        error: "Missing Binance credentials",
+        error: `Missing ${this.exchange} credentials`,
         status: 400,
       };
     }
 
-    const client = new BinanceClient(apiKey, apiSecret);
+    const client = this.createRestClient(apiKey, apiSecret);
+    if (!client) {
+      return {
+        success: false,
+        error: `No REST client for ${this.exchange} (WS path is the only option)`,
+        status: 400,
+      };
+    }
 
     try {
       let result: unknown;
@@ -260,6 +284,26 @@ export class ExchangeConnectionManager extends DurableObject {
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       return { success: false, error: msg, status: 500 };
+    }
+  }
+
+  /**
+   * Construct the REST client for this exchange. Only Binance is wired
+   * today; the bybit/mexc REST clients exist in the worker but are
+   * not yet wired here. For those exchanges, WS is the only path —
+   * if the WS is down, the call returns a 400 instructing the operator
+   * to use the WS path. Wiring the bybit/mexc REST clients is a
+   * follow-up.
+   */
+  private createRestClient(
+    apiKey: string,
+    apiSecret: string
+  ): BinanceClient | null {
+    switch (this.exchange) {
+      case "binance":
+        return new BinanceClient(apiKey, apiSecret);
+      default:
+        return null;
     }
   }
 }

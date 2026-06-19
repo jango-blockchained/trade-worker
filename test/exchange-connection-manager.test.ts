@@ -421,7 +421,7 @@ describe("ExchangeConnectionManager", () => {
 
   // ─── D. executeTrade() RPC ─────────────────────────────────────────────
 
-  test("should return 400 'Missing Binance credentials' when BINANCE_KEY_BINDING is missing", async () => {
+  test("should return 400 'Missing credentials' when BINANCE_KEY_BINDING is missing", async () => {
     // Arrange — DO with no fetch setup needed; executeTrade is pure RPC
     const doInstance = new ExchangeConnectionManager(
       mockCtx as any,
@@ -441,7 +441,7 @@ describe("ExchangeConnectionManager", () => {
     // Assert
     expect(result).toEqual({
       success: false,
-      error: "Missing Binance credentials",
+      error: "Missing binance credentials",
       status: 400,
     });
   });

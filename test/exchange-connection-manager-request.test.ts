@@ -211,18 +211,25 @@ describe("ExchangeConnectionManager.request()", () => {
     const pendingMap = (doInstance as any).pending as Map<string, unknown>;
     expect(pendingMap.size).toBe(2);
 
-    // Attach catch handlers so bun:test doesn't report the synchronous
-    // rejection as "unhandled" between fire() and our await below.
-    p1.catch(() => {});
-    p2.catch(() => {});
+    // Capture the rejection messages via .catch before firing close, so
+    // the close handler's rejection is observed by a registered handler
+    // (avoids bun:test's unhandled-rejection check).
+    const p1Error = p1.catch((e: unknown) => e);
+    const p2Error = p2.catch((e: unknown) => e);
 
-    // Defer the fire to a macrotask so the test's await expect is set
-    // up before the rejection propagates.
-    setTimeout(() => {
-      fakeWs.fire("close", { code: 1006 });
-    }, 0);
+    // Fire the close event. The close handler schedules a queueMicrotask
+    // to clear the pending map and reject in-flight requests.
+    fakeWs.fire("close", { code: 1006 });
 
-    await expect(p1).rejects.toThrow(/closed/);
-    await expect(p2).rejects.toThrow(/closed/);
+    // Give the queueMicrotask a few macrotask ticks to run.
+    await new Promise((r) => setTimeout(r, 10));
+
+    const e1 = await p1Error;
+    const e2 = await p2Error;
+
+    expect(e1).toBeInstanceOf(Error);
+    expect((e1 as Error).message).toMatch(/closed/);
+    expect(e2).toBeInstanceOf(Error);
+    expect((e2 as Error).message).toMatch(/closed/);
   });
 });

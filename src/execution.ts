@@ -431,7 +431,9 @@ export async function executeTrade(
         payload: { exchange: routedExchange, action, symbol, quantity, price },
         result: { success: true },
         latencyMs,
-      })
+      }).catch((err) =>
+        logger.error("trackAnalytics failed", { error: String(err) })
+      )
     );
 
     // Send notification via telegram-worker after trade execution (non-blocking)
@@ -485,7 +487,9 @@ export async function executeTrade(
         },
         result: { success: false, error: errorMsg },
         latencyMs,
-      })
+      }).catch((err) =>
+        logger.error("trackAnalytics failed", { error: String(err) })
+      )
     );
 
     return tradeResult;

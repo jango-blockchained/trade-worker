@@ -17,6 +17,7 @@ import {
 import worker, { factories } from "../src/index";
 import { factories as routerFactories } from "../src/exchange-router";
 import { validateApiCredentials, validateTradePayload } from "../src/execution";
+import * as executionModule from "../src/execution.js";
 import { saveReportToR2 } from "../src/reports";
 
 // --- Mock Exchange Clients ---
@@ -995,6 +996,56 @@ describe("Trade Worker - Webhook Endpoint (/webhook)", () => {
     if (response.status < 400) {
       expect(routerFactories.createMexcClient).toHaveBeenCalled();
     }
+  });
+});
+
+describe("webhook probe mode", () => {
+  it("short-circuits before executeTrade and logs per-hop duration", async () => {
+    const executeTradeSpy = vi.spyOn(executionModule, "executeTrade");
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const probePayload = {
+      probe: true,
+      probe_id: "p-trade-1",
+      symbol: "BTCUSDT",
+      action: "LONG",
+      quantity: 0.001,
+    };
+
+    const request = new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Auth-Key": "test-internal-key",
+      },
+      body: JSON.stringify(probePayload),
+    });
+    (request as any).json = async () => probePayload;
+
+    const ctx = { waitUntil: vi.fn() } as any;
+    const response = await worker.fetch(request, mockEnv, ctx);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.probe_id).toBe("p-trade-1");
+    expect(body.status).toBe("probed");
+
+    expect(executeTradeSpy).not.toHaveBeenCalled();
+
+    const probeLog = consoleSpy.mock.calls.find((call) => {
+      const arg = call[0];
+      if (typeof arg !== "string") return false;
+      try {
+        const parsed = JSON.parse(arg) as { probe_id?: string; hop?: string };
+        return parsed.probe_id === "p-trade-1" && parsed.hop === "trade-worker";
+      } catch {
+        return false;
+      }
+    });
+    expect(probeLog).toBeDefined();
+
+    consoleSpy.mockRestore();
+    executeTradeSpy.mockRestore();
   });
 });
 

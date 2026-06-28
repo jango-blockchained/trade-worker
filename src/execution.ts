@@ -73,13 +73,30 @@ interface ValidationResult {
 
 /**
  * Updates D1 database with trade and position records
+ *
+ * Both D1 writes (trades + positions) are dispatched via
+ * `ctx.waitUntil(...)` so they run in the background after the
+ * HTTP response is sent. This is the key change for the
+ * 2026-06-27 fastpath optimization: previously these writes
+ * blocked the response (two awaited service-binding round-trips
+ * to d1-worker, each ~30-50ms at the edge). With fire-and-forget
+ * the response returns as soon as the exchange API call completes.
+ *
+ * Trade-off: if the worker is killed (e.g. eviction, deploy)
+ * before the writes complete, the trade records can be lost.
+ * Mitigation: the `ctx.waitUntil` promise is logged on failure
+ * so a missing record is visible in logs, and the underlying
+ * exchange API call is the source of truth for "did the trade
+ * actually execute" (the response shape is preserved in
+ * triggerReportSave's R2 dump).
  */
 export async function updateD1TradeRecords(
   env: ExecutionEnv,
   result: unknown,
   payload: WebhookPayload,
   routedExchange: string,
-  overriddenLeverage: number | undefined
+  overriddenLeverage: number | undefined,
+  ctx?: ExecutionContext
 ): Promise<void> {
   if (!env.D1_SERVICE) return;
 
@@ -129,14 +146,35 @@ export async function updateD1TradeRecords(
       return;
     }
 
-    await Promise.all([
-      serviceFetch(env.D1_SERVICE, "/query", tradePayload, {
-        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING },
-      }),
-      serviceFetch(env.D1_SERVICE, "/query", posPayload, {
-        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING },
-      }),
-    ]);
+    const d1Headers = { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING };
+    const tradeWrite = serviceFetch(env.D1_SERVICE, "/query", tradePayload, {
+      headers: d1Headers,
+    }).catch((err) => {
+      logger.error("Background D1 trade-record write failed", {
+        tradeId,
+        error: toError(err),
+      });
+    });
+    const posWrite = serviceFetch(env.D1_SERVICE, "/query", posPayload, {
+      headers: d1Headers,
+    }).catch((err) => {
+      logger.error("Background D1 position-record write failed", {
+        positionId: posId,
+        error: toError(err),
+      });
+    });
+
+    if (ctx) {
+      // Non-blocking: the response returns to the caller immediately
+      // while the D1 writes happen in the background. ctx.waitUntil
+      // keeps the worker alive until both writes settle.
+      ctx.waitUntil(Promise.all([tradeWrite, posWrite]));
+    } else {
+      // Fallback for callers without an ExecutionContext (tests,
+      // internal callers): block until the writes complete so we
+      // don't drop them on the floor.
+      await Promise.all([tradeWrite, posWrite]);
+    }
   } catch (error: unknown) {
     logger.error("Failed to update D1 trades and positions tables", {
       error: toError(error),
@@ -422,12 +460,15 @@ export async function executeTrade(
 
     // Update D1 tables with trade and position data
     if (env.D1_SERVICE) {
+      // Pass ctx so updateD1TradeRecords can dispatch the writes
+      // via ctx.waitUntil(...) instead of blocking the response.
       await updateD1TradeRecords(
         env,
         result,
         payload,
         routedExchange,
-        overriddenLeverage
+        overriddenLeverage,
+        ctx
       );
     }
 

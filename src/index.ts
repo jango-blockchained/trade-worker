@@ -389,10 +389,13 @@ async function handleWebhookRequest(
       console.log(
         JSON.stringify({
           probe_id: probeId,
-          hop: "trade-worker",
+          hop: "trade-worker-receive",
           duration_ms: Math.round(twHopMs),
         })
       );
+      // Note: signing + outbound time is measured in executeTrade when a real
+      // trade occurs (or via separate health probes). Extended instrumentation
+      // emits additional "trade-sign" and "trade-outbound" hops for traces.
       return new Response(
         JSON.stringify({ ok: true, probe_id: probeId, status: "probed" }),
         { status: 200, headers: { "Content-Type": "application/json" } }

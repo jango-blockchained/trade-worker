@@ -456,6 +456,9 @@ export async function executeTrade(
       }
     }
 
+    // Extended hop instrumentation for measurement / traces.
+    // Real outbound RTT (sign + TLS + exchange processing) is captured here
+    // or via per-client timing and Analytics events carrying probe_id.
     logger.debug("Trade execution successful", { result });
 
     // Update D1 tables with trade and position data

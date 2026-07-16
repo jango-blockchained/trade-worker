@@ -125,10 +125,7 @@ function tradeExecuteAuthConfigError(): Response {
   return Errors.internal("Service configuration error");
 }
 
-function requireTradeExecuteAuth(
-  request: Request,
-  env: Env
-): Response | null {
+function requireTradeExecuteAuth(request: Request, env: Env): Response | null {
   if (!resolveInternalAuthKey(env, TRADE_EXECUTE_AUTH_KEY_FIELDS)) {
     return tradeExecuteAuthConfigError();
   }

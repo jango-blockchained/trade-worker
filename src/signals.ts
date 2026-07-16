@@ -263,7 +263,10 @@ export async function handleGetSignalsRequest(
   } catch (error) {
     logger.error("Error fetching signals from D1", { error: toError(error) });
     return createJsonResponse(
-      { success: false, error: "Internal server error while fetching signals." },
+      {
+        success: false,
+        error: "Internal server error while fetching signals.",
+      },
       500
     );
   }

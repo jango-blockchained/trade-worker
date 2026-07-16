@@ -12,16 +12,16 @@ import {
 } from "@jango-blockchained/hoox-shared/errors";
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
-
-const logger = createLogger({ service: "trade-worker", module: "execution" });
-
-/** Reuse router across requests — providers are registered once per isolate. */
-const exchangeRouter = new ExchangeRouter();
 import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
 import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 import type { IDbLogger } from "./db-logger";
 import { ExchangeRouter, type Env } from "./exchange-router";
 import { sendTradeNotificationToTelegram } from "./notifications";
+
+const logger = createLogger({ service: "trade-worker", module: "execution" });
+
+/** Reuse router across requests — providers are registered once per isolate. */
+const exchangeRouter = new ExchangeRouter();
 
 // --- Type Definitions ---
 
@@ -370,7 +370,8 @@ export async function executeTrade(
         { error: toError(e) }
       );
       throw new Error(
-        `KILL_SWITCH_ACTIVE: Unable to verify kill switch (${toError(e)})`
+        `KILL_SWITCH_ACTIVE: Unable to verify kill switch (${toError(e)})`,
+        { cause: e }
       );
     }
     // --- End Kill Switch & Risk Management ---

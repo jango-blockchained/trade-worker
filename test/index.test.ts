@@ -1317,13 +1317,10 @@ describe("Trade Worker - scoped execute/read keys", () => {
       INTERNAL_KEY_BINDING: undefined,
     };
 
-    const signalsRequest = new Request(
-      "http://localhost/api/signals?limit=5",
-      {
-        method: "GET",
-        headers: { "X-Internal-Auth-Key": "read-only-key" },
-      }
-    );
+    const signalsRequest = new Request("http://localhost/api/signals?limit=5", {
+      method: "GET",
+      headers: { "X-Internal-Auth-Key": "read-only-key" },
+    });
     const signalsRes = await worker.fetch(signalsRequest, readEnv, {
       waitUntil: vi.fn(),
     } as any);

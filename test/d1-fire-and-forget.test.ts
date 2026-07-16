@@ -107,14 +107,12 @@ describe("updateD1TradeRecords — fire-and-forget behavior", () => {
 
   beforeEach(() => {
     d1Calls = [];
-    mockServiceFetch = jest.fn(
-      async (url: string, init: { body: string }) => {
-        d1Calls.push({ url, body: JSON.parse(init.body) });
-        return new Response(JSON.stringify({ success: true }), {
-          status: 200,
-        });
-      }
-    );
+    mockServiceFetch = jest.fn(async (url: string, init: { body: string }) => {
+      d1Calls.push({ url, body: JSON.parse(init.body) });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+      });
+    });
     mockCtx = {
       waitUntil: jest.fn((p: Promise<unknown>) => {
         // Capture the promise but don't await it — that's the

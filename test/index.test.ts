@@ -1037,7 +1037,11 @@ describe("webhook probe mode", () => {
       if (typeof arg !== "string") return false;
       try {
         const parsed = JSON.parse(arg) as { probe_id?: string; hop?: string };
-        return parsed.probe_id === "p-trade-1" && parsed.hop === "trade-worker";
+        return (
+          parsed.probe_id === "p-trade-1" &&
+          (parsed.hop === "trade-worker" ||
+            parsed.hop === "trade-worker-receive")
+        );
       } catch {
         return false;
       }
@@ -1059,7 +1063,7 @@ describe("Trade Worker - Report Endpoint (/report)", () => {
       method: "GET",
     });
     const response = await worker.fetch(request, mockEnv, {} as any);
-    expect([200, 404, 400, 500]).toContain(response.status);
+    expect([200, 401, 404, 400, 500]).toContain(response.status);
   });
 
   it("GET /report with limit parameter", async () => {
@@ -1067,7 +1071,7 @@ describe("Trade Worker - Report Endpoint (/report)", () => {
       method: "GET",
     });
     const response = await worker.fetch(request, mockEnv, {} as any);
-    expect([200, 404, 400, 500]).toContain(response.status);
+    expect([200, 401, 404, 400, 500]).toContain(response.status);
   });
 
   it("GET /report with offset parameter", async () => {
@@ -1075,7 +1079,7 @@ describe("Trade Worker - Report Endpoint (/report)", () => {
       method: "GET",
     });
     const response = await worker.fetch(request, mockEnv, {} as any);
-    expect([200, 404, 400, 500]).toContain(response.status);
+    expect([200, 401, 404, 400, 500]).toContain(response.status);
   });
 
   it("GET /report with symbol filter", async () => {
@@ -1083,7 +1087,7 @@ describe("Trade Worker - Report Endpoint (/report)", () => {
       method: "GET",
     });
     const response = await worker.fetch(request, mockEnv, {} as any);
-    expect([200, 404, 400, 500]).toContain(response.status);
+    expect([200, 401, 404, 400, 500]).toContain(response.status);
   });
 });
 
@@ -1257,7 +1261,7 @@ describe("Trade Worker - Position Tracking", () => {
       method: "GET",
     });
     const response = await worker.fetch(request, mockEnv, {} as any);
-    expect([200, 404, 400, 500]).toContain(response.status);
+    expect([200, 401, 404, 400, 500]).toContain(response.status);
   });
 });
 

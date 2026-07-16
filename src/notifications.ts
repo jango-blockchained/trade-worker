@@ -49,10 +49,15 @@ export async function sendTradeNotificationToTelegram(
 
     const telegramPayload = { message: notificationMessage };
     logger.info("Calling TELEGRAM_SERVICE for notification", { dbLogId });
-    const headers: Record<string, string> = {};
-    if (env.TELEGRAM_INTERNAL_KEY_BINDING) {
-      headers["X-Internal-Auth-Key"] = env.TELEGRAM_INTERNAL_KEY_BINDING;
+    if (!env.TELEGRAM_INTERNAL_KEY_BINDING) {
+      logger.error(
+        "TELEGRAM_INTERNAL_KEY_BINDING not configured — skipping notification (fail-closed)"
+      );
+      return;
     }
+    const headers: Record<string, string> = {
+      "X-Internal-Auth-Key": env.TELEGRAM_INTERNAL_KEY_BINDING,
+    };
     const notificationResponse = await serviceFetch(
       env.TELEGRAM_SERVICE,
       "/alert",

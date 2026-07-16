@@ -10,6 +10,9 @@ import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
 
 const logger = createLogger({ service: "trade-worker", module: "execution" });
+
+/** Reuse router across requests — providers are registered once per isolate. */
+const exchangeRouter = new ExchangeRouter();
 import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
 import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
 import type { IDbLogger } from "./db-logger";
@@ -389,14 +392,12 @@ export async function executeTrade(
     }
     // --- End Risk Management ---
 
-    const router = new ExchangeRouter();
-
     let client: IExchangeClient;
     let routedExchange: string;
     let useWebsocketDO = false;
 
     try {
-      const routeResult = await router.route(payload, env);
+      const routeResult = await exchangeRouter.route(payload, env);
       client = routeResult.client;
       routedExchange = routeResult.exchange;
       useWebsocketDO = routeResult.useWebsocketDO || false;

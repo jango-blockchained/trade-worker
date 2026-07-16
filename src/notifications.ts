@@ -1,24 +1,14 @@
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
 import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
+import type { TradeQueueMessage } from "@jango-blockchained/hoox-shared";
 
 const logger = createLogger({
   service: "trade-worker",
   module: "notifications",
 });
 
-// --- Type Definitions ---
-
-export interface TradeQueueMessage {
-  requestId: string;
-  exchange: string;
-  action: string;
-  symbol: string;
-  quantity: number;
-  price?: number;
-  leverage?: number;
-  queuedAt: string;
-}
+export type { TradeQueueMessage };
 
 export interface NotificationsEnv {
   TELEGRAM_SERVICE?: Fetcher;

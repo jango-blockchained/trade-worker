@@ -14,6 +14,7 @@ import {
 } from "@jango-blockchained/hoox-shared/middleware";
 import { createRouter } from "@jango-blockchained/hoox-shared/router";
 import { createQueueHandler } from "@jango-blockchained/hoox-shared/queue-handler";
+import { TradeQueueMessageSchema } from "@jango-blockchained/hoox-shared";
 import {
   WebhookPayload,
   WebhookPayloadSchema,
@@ -278,7 +279,11 @@ export default {
       backoffDelays: BACKOFF_DELAYS,
       logger,
       onMessage: async (trade, _attemptNumber) => {
-        const result = await executeTradeFromQueue(trade, env, ctx);
+        const parsed = TradeQueueMessageSchema.safeParse(trade);
+        if (!parsed.success) {
+          throw new Error("Invalid trade queue message");
+        }
+        const result = await executeTradeFromQueue(parsed.data, env, ctx);
         if (!result.success) {
           throw new Error(result.error || "Trade execution failed");
         }

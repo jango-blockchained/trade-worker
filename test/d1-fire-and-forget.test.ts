@@ -24,8 +24,8 @@ import { describe, expect, it, jest, beforeEach } from "bun:test";
 // behavior.
 
 interface D1Call {
-  query: string;
-  params: unknown[];
+  url: string;
+  body: Record<string, unknown>;
 }
 
 function makeUpdateD1(
@@ -50,57 +50,43 @@ function makeUpdateD1(
     if (!env.INTERNAL_KEY_BINDING) return;
 
     const tradeId = crypto.randomUUID();
-    const tradePayload = {
-      query:
-        "INSERT INTO trades (id, timestamp, exchange, symbol, action, quantity, price, leverage, status, raw_response) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      params: [
-        tradeId,
-        1,
-        routedExchange,
-        payload.symbol,
-        payload.action,
-        payload.quantity,
-        payload.price ?? null,
-        overriddenLeverage ?? null,
-        "EXECUTED",
-        "{}",
-      ],
-    };
     const side = payload.action.includes("LONG") ? "LONG" : "SHORT";
-    const posPayload = {
-      query:
-        "REPLACE INTO positions (id, exchange, symbol, side, size, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      params: [
-        `${routedExchange}-${payload.symbol}-${side}`,
-        routedExchange,
-        payload.symbol,
-        side,
-        1,
-        side,
-        1,
-      ],
-    };
-
     const d1Headers = { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING };
-    const tradeWrite = serviceFetchImpl("http://internal/query", {
+
+    // Mirrors production: named RPC endpoints, not free-form /query
+    const tradeWrite = serviceFetchImpl("http://internal/rpc/insert-trade", {
       method: "POST",
-      body: JSON.stringify(tradePayload),
+      body: JSON.stringify({
+        id: tradeId,
+        exchange: routedExchange,
+        symbol: payload.symbol,
+        action: payload.action,
+        quantity: payload.quantity,
+        price: payload.price ?? null,
+        leverage: overriddenLeverage ?? null,
+        status: "EXECUTED",
+      }),
       headers: d1Headers,
     }).catch((err) => {
-      // Mirror production logger.error so the test can assert
-      // the error is logged. createLogger writes to console.error.
       console.error("Background D1 trade-record write failed", {
         tradeId,
         error: err instanceof Error ? err.message : String(err),
       });
     });
-    const posWrite = serviceFetchImpl("http://internal/query", {
+    const posWrite = serviceFetchImpl("http://internal/rpc/upsert-position", {
       method: "POST",
-      body: JSON.stringify(posPayload),
+      body: JSON.stringify({
+        id: `${routedExchange}-${payload.symbol}-${side}`,
+        exchange: routedExchange,
+        symbol: payload.symbol,
+        side,
+        size: payload.quantity,
+        status: "OPEN",
+      }),
       headers: d1Headers,
     }).catch((err) => {
       console.error("Background D1 position-record write failed", {
-        positionId: `${routedExchange}-${payload.symbol}-${payload.action.includes("LONG") ? "LONG" : "SHORT"}`,
+        positionId: `${routedExchange}-${payload.symbol}-${side}`,
         error: err instanceof Error ? err.message : String(err),
       });
     });
@@ -121,12 +107,14 @@ describe("updateD1TradeRecords — fire-and-forget behavior", () => {
 
   beforeEach(() => {
     d1Calls = [];
-    mockServiceFetch = jest.fn(async (_url: string, init: { body: string }) => {
-      d1Calls.push(JSON.parse(init.body));
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-      });
-    });
+    mockServiceFetch = jest.fn(
+      async (url: string, init: { body: string }) => {
+        d1Calls.push({ url, body: JSON.parse(init.body) });
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+        });
+      }
+    );
     mockCtx = {
       waitUntil: jest.fn((p: Promise<unknown>) => {
         // Capture the promise but don't await it — that's the
@@ -165,10 +153,10 @@ describe("updateD1TradeRecords — fire-and-forget behavior", () => {
     // Drain the background writes so the mock serviceFetch is called
     await waitArg;
 
-    // Both D1 writes happened
+    // Both D1 writes happened via named RPC
     expect(d1Calls).toHaveLength(2);
-    expect(d1Calls[0].query).toMatch(/INSERT INTO trades/);
-    expect(d1Calls[1].query).toMatch(/REPLACE INTO positions/);
+    expect(d1Calls[0].url).toContain("/rpc/insert-trade");
+    expect(d1Calls[1].url).toContain("/rpc/upsert-position");
   });
 
   it("awaits writes when no ctx is provided (test / internal path)", async () => {

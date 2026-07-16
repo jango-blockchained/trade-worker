@@ -168,19 +168,19 @@ async function logFailedTrade(
         return;
       }
 
-      const logPayload = {
-        query: `INSERT INTO system_logs (level, source, message, details) VALUES (?, ?, ?, ?)`,
-        params: [
-          "ERROR",
-          "queue-consumer",
-          `Trade failed: ${trade.requestId}`,
-          JSON.stringify({ trade, error: errorMsg }),
-        ],
-      };
-
-      await serviceFetch(env.D1_SERVICE, "/query", logPayload, {
-        headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING },
-      });
+      await serviceFetch(
+        env.D1_SERVICE,
+        "/rpc/insert-system-log",
+        {
+          level: "ERROR",
+          source: "queue-consumer",
+          message: `Trade failed: ${trade.requestId}`,
+          details: { trade, error: errorMsg },
+        },
+        {
+          headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING },
+        }
+      );
     }
   } catch (error: unknown) {
     logger.error("Failed to log failed trade", { error: toError(error) });

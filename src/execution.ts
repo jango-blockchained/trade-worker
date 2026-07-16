@@ -108,38 +108,9 @@ export async function updateD1TradeRecords(
     const { action, symbol, quantity, price } = payload;
     const tradeStatus = "EXECUTED";
 
-    const tradePayload = {
-      query: `INSERT INTO trades (id, timestamp, exchange, symbol, action, quantity, price, leverage, status, raw_response) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      params: [
-        tradeId,
-        Math.floor(Date.now() / 1000),
-        routedExchange,
-        symbol,
-        action,
-        quantity,
-        price || null,
-        overriddenLeverage || null,
-        tradeStatus,
-        JSON.stringify(result),
-      ],
-    };
-
     const side = action.includes("LONG") ? "LONG" : "SHORT";
     const posStatus = action.startsWith("CLOSE") ? "CLOSED" : "OPEN";
     const posId = `${routedExchange}-${symbol}-${side}`;
-
-    const posPayload = {
-      query: `REPLACE INTO positions (id, exchange, symbol, side, size, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      params: [
-        posId,
-        routedExchange,
-        symbol,
-        side,
-        posStatus === "OPEN" ? quantity : 0,
-        posStatus,
-        Math.floor(Date.now() / 1000),
-      ],
-    };
 
     // Fail closed: if INTERNAL_KEY_BINDING is not configured, don't send the request
     if (!env.INTERNAL_KEY_BINDING) {
@@ -149,18 +120,44 @@ export async function updateD1TradeRecords(
       return;
     }
 
+    // Named D1 RPC endpoints (fixed SQL templates) — prefer over free-form /query
     const d1Headers = { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING };
-    const tradeWrite = serviceFetch(env.D1_SERVICE, "/query", tradePayload, {
-      headers: d1Headers,
-    }).catch((err) => {
+    const tradeWrite = serviceFetch(
+      env.D1_SERVICE,
+      "/rpc/insert-trade",
+      {
+        id: tradeId,
+        timestamp: Math.floor(Date.now() / 1000),
+        exchange: routedExchange,
+        symbol,
+        action,
+        quantity,
+        price: price || null,
+        leverage: overriddenLeverage || null,
+        status: tradeStatus,
+        raw_response: result,
+      },
+      { headers: d1Headers }
+    ).catch((err) => {
       logger.error("Background D1 trade-record write failed", {
         tradeId,
         error: toError(err),
       });
     });
-    const posWrite = serviceFetch(env.D1_SERVICE, "/query", posPayload, {
-      headers: d1Headers,
-    }).catch((err) => {
+    const posWrite = serviceFetch(
+      env.D1_SERVICE,
+      "/rpc/upsert-position",
+      {
+        id: posId,
+        exchange: routedExchange,
+        symbol,
+        side,
+        size: posStatus === "OPEN" ? quantity : 0,
+        status: posStatus,
+        updated_at: Math.floor(Date.now() / 1000),
+      },
+      { headers: d1Headers }
+    ).catch((err) => {
       logger.error("Background D1 position-record write failed", {
         positionId: posId,
         error: toError(err),

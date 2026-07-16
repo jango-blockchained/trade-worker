@@ -70,7 +70,31 @@ async function queryD1(
 }
 
 /**
- * Inserts a trade signal into the D1 database.
+ * Call a named D1 RPC endpoint (fixed SQL templates on d1-worker).
+ */
+async function rpcD1(
+  env: D1Env,
+  path: string,
+  body: Record<string, unknown>
+): Promise<D1ServiceResponse> {
+  const response = await env.D1_SERVICE.fetch(`http://internal${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`D1_SERVICE ${path} responded with ${response.status}`);
+  }
+
+  return response.json() as Promise<D1ServiceResponse>;
+}
+
+/**
+ * Inserts a trade signal into the D1 database via named RPC.
  */
 export async function insertSignal(
   signal: TradeSignalRecord,
@@ -79,22 +103,18 @@ export async function insertSignal(
   if (!env.D1_SERVICE) {
     throw new Error("D1_SERVICE binding not configured.");
   }
-  const query = `INSERT INTO trade_signals (signal_id, timestamp, symbol, signal_type, source, raw_data) 
-         VALUES (?, ?, ?, ?, ?, ?)`;
-  const params = [
-    signal.signal_id,
-    signal.timestamp,
-    signal.symbol,
-    signal.signal_type,
-    signal.source ?? null,
-    signal.raw_data ?? null,
-  ];
-
-  return queryD1(env, query, params);
+  return rpcD1(env, "/rpc/insert-signal", {
+    signal_id: signal.signal_id,
+    timestamp: signal.timestamp,
+    symbol: signal.symbol,
+    signal_type: signal.signal_type,
+    source: signal.source ?? null,
+    raw_data: signal.raw_data ?? null,
+  });
 }
 
 /**
- * Retrieves recent trade signals from the D1 database.
+ * Retrieves recent trade signals from the D1 database (read still uses /query).
  */
 export async function getRecentSignals(
   env: D1Env,

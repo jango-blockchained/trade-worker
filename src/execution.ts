@@ -1,7 +1,7 @@
 // workers/trade-worker/src/execution.ts
 // Core trade execution logic extracted from index.ts
 
-import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
+import { authenticatedServiceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
 import {
   createJsonResponse,
   toError,
@@ -121,9 +121,9 @@ export async function updateD1TradeRecords(
     }
 
     // Named D1 RPC endpoints (fixed SQL templates) — prefer over free-form /query
-    const d1Headers = { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING };
-    const tradeWrite = serviceFetch(
+    const tradeWrite = authenticatedServiceFetch(
       env.D1_SERVICE,
+      env,
       "/rpc/insert-trade",
       {
         id: tradeId,
@@ -136,16 +136,16 @@ export async function updateD1TradeRecords(
         leverage: overriddenLeverage || null,
         status: tradeStatus,
         raw_response: result,
-      },
-      { headers: d1Headers }
+      }
     ).catch((err) => {
       logger.error("Background D1 trade-record write failed", {
         tradeId,
         error: toError(err),
       });
     });
-    const posWrite = serviceFetch(
+    const posWrite = authenticatedServiceFetch(
       env.D1_SERVICE,
+      env,
       "/rpc/upsert-position",
       {
         id: posId,
@@ -155,8 +155,7 @@ export async function updateD1TradeRecords(
         size: posStatus === "OPEN" ? quantity : 0,
         status: posStatus,
         updated_at: Math.floor(Date.now() / 1000),
-      },
-      { headers: d1Headers }
+      }
     ).catch((err) => {
       logger.error("Background D1 position-record write failed", {
         positionId: posId,

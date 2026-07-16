@@ -22,7 +22,7 @@ import {
 } from "@jango-blockchained/hoox-shared/types";
 import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
 import { healthCheck } from "@jango-blockchained/hoox-shared/health";
-import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
+import { authenticatedServiceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
 import {
   executeTrade,
   type ExecutionEnv,
@@ -169,17 +169,15 @@ async function logFailedTrade(
         return;
       }
 
-      await serviceFetch(
+      await authenticatedServiceFetch(
         env.D1_SERVICE,
+        env,
         "/rpc/insert-system-log",
         {
           level: "ERROR",
           source: "queue-consumer",
           message: `Trade failed: ${trade.requestId}`,
           details: { trade, error: errorMsg },
-        },
-        {
-          headers: { "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING },
         }
       );
     }

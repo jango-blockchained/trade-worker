@@ -1,6 +1,6 @@
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
-import { serviceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
+import { authenticatedServiceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
 import type { TradeQueueMessage } from "@jango-blockchained/hoox-shared";
 
 const logger = createLogger({
@@ -45,14 +45,12 @@ export async function sendTradeNotificationToTelegram(
       );
       return;
     }
-    const headers: Record<string, string> = {
-      "X-Internal-Auth-Key": env.TELEGRAM_INTERNAL_KEY_BINDING,
-    };
-    const notificationResponse = await serviceFetch(
+    const notificationResponse = await authenticatedServiceFetch(
       env.TELEGRAM_SERVICE,
+      {},
       "/alert",
       telegramPayload,
-      { headers }
+      { internalKey: env.TELEGRAM_INTERNAL_KEY_BINDING }
     );
 
     if (!notificationResponse.ok) {

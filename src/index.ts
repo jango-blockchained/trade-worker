@@ -25,6 +25,7 @@ import { healthCheck } from "@jango-blockchained/hoox-shared/health";
 import {
   authenticatedServiceFetch,
   D1_WRITE_AUTH_KEY_FIELDS,
+  TRADE_EXECUTE_AUTH_KEY_FIELDS,
   resolveInternalAuthKey,
 } from "@jango-blockchained/hoox-shared/service-bindings";
 import {
@@ -119,6 +120,24 @@ const BACKOFF_DELAYS = [0, 30, 60, 300, 900]; // 0s, 30s, 1m, 5m, 15m
 const PROCESS_ENDPOINT = "/process"; // For legacy/direct calls with internal key
 const WEBHOOK_ENDPOINT = "/webhook"; // For calls from hoox via Service Binding
 const SIGNALS_ENDPOINT = "/api/signals"; // New endpoint for D1 signals
+
+function tradeExecuteAuthConfigError(): Response {
+  return Errors.internal("Service configuration error");
+}
+
+function requireTradeExecuteAuth(
+  request: Request,
+  env: Env
+): Response | null {
+  if (!resolveInternalAuthKey(env, TRADE_EXECUTE_AUTH_KEY_FIELDS)) {
+    return tradeExecuteAuthConfigError();
+  }
+  return requireInternalAuth(
+    request,
+    env as unknown as InternalAuthEnv,
+    TRADE_EXECUTE_AUTH_KEY_FIELDS
+  );
+}
 
 // --- Queue Consumer Helper Functions ---
 
@@ -324,29 +343,21 @@ async function handleWebhookRequest(
     request.headers.get("X-Request-ID") || crypto.randomUUID();
 
   try {
-    // Internal authentication check (before body parsing - fail fast)
-    if (!env.INTERNAL_KEY_BINDING) {
-      const response = Errors.internal("Service configuration error");
-      // Log the config error if we can
-      try {
-        dbLogId = await dbLogger.logRequest(
-          request,
-          `[config error] ${request.url}`,
-          ctx
-        );
-        await dbLogger.logResponse(dbLogId, response, null, startTime, ctx);
-      } catch {
-        // Ignore logging failures for config errors
-      }
-      return response;
-    }
-
-    const authError = requireInternalAuth(
-      request,
-      env as unknown as InternalAuthEnv,
-      "INTERNAL_KEY_BINDING"
-    );
+    const authError = requireTradeExecuteAuth(request, env);
     if (authError) {
+      if (authError.status === 500) {
+        try {
+          dbLogId = await dbLogger.logRequest(
+            request,
+            `[config error] ${request.url}`,
+            ctx
+          );
+          await dbLogger.logResponse(dbLogId, authError, null, startTime, ctx);
+        } catch {
+          // Ignore logging failures for config errors
+        }
+        return authError;
+      }
       logger.warn(
         `Authentication failed for webhook request ID: ${incomingRequestId}`
       );
@@ -484,29 +495,21 @@ async function handleProcessRequest(
   let incomingRequestId: string | undefined;
 
   try {
-    // Internal authentication check (before body parsing - fail fast)
-    if (!env.INTERNAL_KEY_BINDING) {
-      const response = Errors.internal("Service configuration error");
-      // Log the config error if we can
-      try {
-        dbLogId = await dbLogger.logRequest(
-          request,
-          `[config error] ${request.url}`,
-          ctx
-        );
-        await dbLogger.logResponse(dbLogId, response, null, startTime, ctx);
-      } catch {
-        // Ignore logging failures for config errors
-      }
-      return response;
-    }
-
-    const authError = requireInternalAuth(
-      request,
-      env as unknown as InternalAuthEnv,
-      "INTERNAL_KEY_BINDING"
-    );
+    const authError = requireTradeExecuteAuth(request, env);
     if (authError) {
+      if (authError.status === 500) {
+        try {
+          dbLogId = await dbLogger.logRequest(
+            request,
+            `[config error] ${request.url}`,
+            ctx
+          );
+          await dbLogger.logResponse(dbLogId, authError, null, startTime, ctx);
+        } catch {
+          // Ignore logging failures for config errors
+        }
+        return authError;
+      }
       logger.warn(`Authentication failed for request`);
       // Log auth failure
       try {

@@ -5,6 +5,10 @@
 # Internal auth key for service-to-service authentication
 INTERNAL_KEY_BINDING=your_internal_key_binding_here
 
+# Scoped keys (recommended): execute vs read separation
+# TRADE_EXECUTE_KEY_BINDING=your_trade_execute_key_here
+# TRADE_READ_KEY_BINDING=your_trade_read_key_here
+
 # Telegram internal key for sending trade notifications
 TELEGRAM_INTERNAL_KEY_BINDING=your_telegram_internal_key_here
 

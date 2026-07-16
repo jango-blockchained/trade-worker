@@ -179,10 +179,13 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       expect(responseBody.result).toHaveProperty("signalId");
       expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledTimes(1);
       expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledWith(
-        "http://internal/query",
+        "http://internal/rpc/insert-signal",
         expect.objectContaining({
           method: "POST",
-          body: expect.stringContaining("INSERT INTO trade_signals"),
+          headers: expect.objectContaining({
+            "X-Internal-Auth-Key": "test-internal-key",
+          }),
+          body: expect.stringContaining("signal_id"),
         })
       );
     });
@@ -372,7 +375,7 @@ describe("Trade Worker - D1 Signals Endpoint (/api/signals)", () => {
       const responseBody = (await response.json()) as any;
       expect(responseBody.success).toBe(false);
       expect(responseBody.error).toContain(
-        "Internal server error while retrieving signals."
+        "Internal server error while fetching signals."
       );
       expect(mockEnv.D1_SERVICE.fetch).toHaveBeenCalledTimes(1);
     });
@@ -1262,6 +1265,81 @@ describe("Trade Worker - Position Tracking", () => {
     });
     const response = await worker.fetch(request, mockEnv, {} as any);
     expect([200, 401, 404, 400, 500]).toContain(response.status);
+  });
+});
+
+describe("Trade Worker - scoped execute/read keys", () => {
+  const validPayload = {
+    exchange: "mexc",
+    action: "LONG",
+    symbol: "BTC_USDT",
+    quantity: 0.01,
+  };
+
+  it("scoped execute key can access /webhook but read key cannot", async () => {
+    const executeEnv = {
+      ...mockEnv,
+      TRADE_EXECUTE_KEY_BINDING: "execute-only-key",
+      TRADE_READ_KEY_BINDING: "read-only-key",
+      INTERNAL_KEY_BINDING: undefined,
+    };
+
+    const webhookRequest = createMockRequest(
+      "POST",
+      "/webhook",
+      validPayload,
+      { "X-Internal-Auth-Key": "execute-only-key" },
+      false
+    );
+    const webhookRes = await worker.fetch(webhookRequest, executeEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(webhookRes.status).not.toBe(401);
+
+    const readAttempt = createMockRequest(
+      "POST",
+      "/webhook",
+      validPayload,
+      { "X-Internal-Auth-Key": "read-only-key" },
+      false
+    );
+    const readRes = await worker.fetch(readAttempt, executeEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(readRes.status).toBe(401);
+  });
+
+  it("scoped read key can access GET /api/signals but not /webhook", async () => {
+    const readEnv = {
+      ...mockEnv,
+      TRADE_READ_KEY_BINDING: "read-only-key",
+      TRADE_EXECUTE_KEY_BINDING: "execute-only-key",
+      INTERNAL_KEY_BINDING: undefined,
+    };
+
+    const signalsRequest = new Request(
+      "http://localhost/api/signals?limit=5",
+      {
+        method: "GET",
+        headers: { "X-Internal-Auth-Key": "read-only-key" },
+      }
+    );
+    const signalsRes = await worker.fetch(signalsRequest, readEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(signalsRes.status).not.toBe(401);
+
+    const writeAttempt = createMockRequest(
+      "POST",
+      "/webhook",
+      validPayload,
+      { "X-Internal-Auth-Key": "read-only-key" },
+      false
+    );
+    const writeRes = await worker.fetch(writeAttempt, readEnv, {
+      waitUntil: vi.fn(),
+    } as any);
+    expect(writeRes.status).toBe(401);
   });
 });
 

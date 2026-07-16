@@ -6,6 +6,14 @@ import {
   createJsonResponse,
   toError,
 } from "@jango-blockchained/hoox-shared/errors";
+import {
+  authenticatedServiceFetch,
+  D1_READ_AUTH_KEY_FIELDS,
+  D1_WRITE_AUTH_KEY_FIELDS,
+  TRADE_EXECUTE_AUTH_KEY_FIELDS,
+  TRADE_READ_AUTH_KEY_FIELDS,
+  resolveInternalAuthKey,
+} from "@jango-blockchained/hoox-shared/service-bindings";
 
 const logger = createLogger({ service: "trade-worker", module: "signals" });
 
@@ -18,6 +26,8 @@ const logger = createLogger({ service: "trade-worker", module: "signals" });
 export interface D1Env {
   D1_SERVICE: Fetcher;
   INTERNAL_KEY_BINDING?: string;
+  D1_READ_KEY_BINDING?: string;
+  D1_WRITE_KEY_BINDING?: string;
   [key: string]: unknown;
 }
 
@@ -53,14 +63,17 @@ async function queryD1(
   query: string,
   params: unknown[] = []
 ): Promise<D1ServiceResponse> {
-  const response = await env.D1_SERVICE.fetch("http://internal/query", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
-    },
-    body: JSON.stringify({ query, params }),
-  });
+  if (!resolveInternalAuthKey(env, D1_READ_AUTH_KEY_FIELDS)) {
+    throw new Error("D1 read auth key not configured");
+  }
+
+  const response = await authenticatedServiceFetch(
+    env.D1_SERVICE,
+    env,
+    "/query",
+    { query, params },
+    { internalKeyFields: D1_READ_AUTH_KEY_FIELDS }
+  );
 
   if (!response.ok) {
     throw new Error(`D1_SERVICE responded with ${response.status}`);
@@ -77,14 +90,17 @@ async function rpcD1(
   path: string,
   body: Record<string, unknown>
 ): Promise<D1ServiceResponse> {
-  const response = await env.D1_SERVICE.fetch(`http://internal${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Internal-Auth-Key": env.INTERNAL_KEY_BINDING || "",
-    },
-    body: JSON.stringify(body),
-  });
+  if (!resolveInternalAuthKey(env, D1_WRITE_AUTH_KEY_FIELDS)) {
+    throw new Error("D1 write auth key not configured");
+  }
+
+  const response = await authenticatedServiceFetch(
+    env.D1_SERVICE,
+    env,
+    path,
+    body,
+    { internalKeyFields: D1_WRITE_AUTH_KEY_FIELDS }
+  );
 
   if (!response.ok) {
     throw new Error(`D1_SERVICE ${path} responded with ${response.status}`);
@@ -145,8 +161,11 @@ export async function handlePostSignalRequest(
   request: Request,
   env: D1Env
 ): Promise<Response> {
-  // Internal authentication check
-  const authResponse = requireInternalAuth(request, env);
+  const authResponse = requireInternalAuth(
+    request,
+    env,
+    TRADE_EXECUTE_AUTH_KEY_FIELDS
+  );
   if (authResponse) return authResponse;
 
   let signalPayload: Record<string, unknown>;
@@ -216,8 +235,11 @@ export async function handleGetSignalsRequest(
   request: Request,
   env: D1Env
 ): Promise<Response> {
-  // Internal authentication check
-  const authResponse = requireInternalAuth(request, env);
+  const authResponse = requireInternalAuth(
+    request,
+    env,
+    TRADE_READ_AUTH_KEY_FIELDS
+  );
   if (authResponse) return authResponse;
 
   const url = new URL(request.url);
@@ -229,22 +251,19 @@ export async function handleGetSignalsRequest(
     return createJsonResponse(
       {
         success: false,
-        error: "Invalid limit parameter. Must be between 1 and 100.",
+        error: "Invalid limit parameter (must be 1-100)",
       },
       400
     );
   }
 
   try {
-    const results = await getRecentSignals(env, limit);
-    return createJsonResponse({ success: true, result: results }, 200);
+    const signals = await getRecentSignals(env, limit);
+    return createJsonResponse({ success: true, result: signals }, 200);
   } catch (error) {
-    logger.error("Error retrieving signals from D1", { error: toError(error) });
+    logger.error("Error fetching signals from D1", { error: toError(error) });
     return createJsonResponse(
-      {
-        success: false,
-        error: "Internal server error while retrieving signals.",
-      },
+      { success: false, error: "Internal server error while fetching signals." },
       500
     );
   }

@@ -4,6 +4,7 @@ import {
   requireInternalAuth,
   type InternalAuthEnv,
 } from "@jango-blockchained/hoox-shared/middleware";
+import { TRADE_READ_AUTH_KEY_FIELDS } from "@jango-blockchained/hoox-shared/service-bindings";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
 
 const logger = createLogger({ service: "trade-worker", module: "reports" });
@@ -91,7 +92,7 @@ export async function handleGetReportRequest(
   const authError = requireInternalAuth(
     request,
     env as InternalAuthEnv,
-    "INTERNAL_KEY_BINDING"
+    TRADE_READ_AUTH_KEY_FIELDS
   );
   if (authError) {
     return authError;

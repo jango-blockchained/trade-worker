@@ -1,6 +1,10 @@
 import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
-import { authenticatedServiceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
+import {
+  authenticatedServiceFetch,
+  TELEGRAM_ALERT_AUTH_KEY_FIELDS,
+  resolveInternalAuthKey,
+} from "@jango-blockchained/hoox-shared/service-bindings";
 import type { TradeQueueMessage } from "@jango-blockchained/hoox-shared";
 
 const logger = createLogger({
@@ -13,6 +17,7 @@ export type { TradeQueueMessage };
 export interface NotificationsEnv {
   TELEGRAM_SERVICE?: Fetcher;
   TELEGRAM_INTERNAL_KEY_BINDING?: string;
+  INTERNAL_KEY_BINDING?: string;
 }
 
 // --- Notification Functions ---
@@ -39,18 +44,18 @@ export async function sendTradeNotificationToTelegram(
 
     const telegramPayload = { message: notificationMessage };
     logger.info("Calling TELEGRAM_SERVICE for notification", { dbLogId });
-    if (!env.TELEGRAM_INTERNAL_KEY_BINDING) {
+    if (!resolveInternalAuthKey(env, TELEGRAM_ALERT_AUTH_KEY_FIELDS)) {
       logger.error(
-        "TELEGRAM_INTERNAL_KEY_BINDING not configured — skipping notification (fail-closed)"
+        "Telegram alert auth key not configured — skipping notification (fail-closed)"
       );
       return;
     }
     const notificationResponse = await authenticatedServiceFetch(
       env.TELEGRAM_SERVICE,
-      {},
+      env,
       "/alert",
       telegramPayload,
-      { internalKey: env.TELEGRAM_INTERNAL_KEY_BINDING }
+      { internalKeyFields: TELEGRAM_ALERT_AUTH_KEY_FIELDS }
     );
 
     if (!notificationResponse.ok) {

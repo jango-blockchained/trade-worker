@@ -1,7 +1,11 @@
 // workers/trade-worker/src/execution.ts
 // Core trade execution logic extracted from index.ts
 
-import { authenticatedServiceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
+import {
+  authenticatedServiceFetch,
+  D1_WRITE_AUTH_KEY_FIELDS,
+  resolveInternalAuthKey,
+} from "@jango-blockchained/hoox-shared/service-bindings";
 import {
   createJsonResponse,
   toError,
@@ -112,10 +116,10 @@ export async function updateD1TradeRecords(
     const posStatus = action.startsWith("CLOSE") ? "CLOSED" : "OPEN";
     const posId = `${routedExchange}-${symbol}-${side}`;
 
-    // Fail closed: if INTERNAL_KEY_BINDING is not configured, don't send the request
-    if (!env.INTERNAL_KEY_BINDING) {
+    // Fail closed: require a D1 write key (scoped or legacy full key)
+    if (!resolveInternalAuthKey(env, D1_WRITE_AUTH_KEY_FIELDS)) {
       logger.error(
-        "INTERNAL_KEY_BINDING not configured, cannot update D1 trade records"
+        "D1 write auth key not configured, cannot update D1 trade records"
       );
       return;
     }
@@ -136,7 +140,8 @@ export async function updateD1TradeRecords(
         leverage: overriddenLeverage || null,
         status: tradeStatus,
         raw_response: result,
-      }
+      },
+      { internalKeyFields: D1_WRITE_AUTH_KEY_FIELDS }
     ).catch((err) => {
       logger.error("Background D1 trade-record write failed", {
         tradeId,
@@ -155,7 +160,8 @@ export async function updateD1TradeRecords(
         size: posStatus === "OPEN" ? quantity : 0,
         status: posStatus,
         updated_at: Math.floor(Date.now() / 1000),
-      }
+      },
+      { internalKeyFields: D1_WRITE_AUTH_KEY_FIELDS }
     ).catch((err) => {
       logger.error("Background D1 position-record write failed", {
         positionId: posId,

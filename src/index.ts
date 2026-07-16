@@ -22,7 +22,11 @@ import {
 } from "@jango-blockchained/hoox-shared/types";
 import { trackAnalytics } from "@jango-blockchained/hoox-shared/analytics";
 import { healthCheck } from "@jango-blockchained/hoox-shared/health";
-import { authenticatedServiceFetch } from "@jango-blockchained/hoox-shared/service-bindings";
+import {
+  authenticatedServiceFetch,
+  D1_WRITE_AUTH_KEY_FIELDS,
+  resolveInternalAuthKey,
+} from "@jango-blockchained/hoox-shared/service-bindings";
 import {
   executeTrade,
   type ExecutionEnv,
@@ -161,10 +165,9 @@ async function logFailedTrade(
 ): Promise<void> {
   try {
     if (env.D1_SERVICE) {
-      // Fail closed: if INTERNAL_KEY_BINDING is not configured, don't send the request
-      if (!env.INTERNAL_KEY_BINDING) {
+      if (!resolveInternalAuthKey(env, D1_WRITE_AUTH_KEY_FIELDS)) {
         logger.error(
-          "INTERNAL_KEY_BINDING not configured, cannot log failed trade"
+          "D1 write auth key not configured, cannot log failed trade"
         );
         return;
       }
@@ -178,7 +181,8 @@ async function logFailedTrade(
           source: "queue-consumer",
           message: `Trade failed: ${trade.requestId}`,
           details: { trade, error: errorMsg },
-        }
+        },
+        { internalKeyFields: D1_WRITE_AUTH_KEY_FIELDS }
       );
     }
   } catch (error: unknown) {

@@ -243,13 +243,47 @@ describe("handleGetReportRequest", () => {
   });
 
   // --------------------------------------------------------------------------
-  // Test 6: Missing key parameter
+  // Test 6: Authentication required
   // --------------------------------------------------------------------------
-  test("returns 400 when 'key' query parameter is missing", async () => {
-    const request = new Request("http://localhost/reports");
+  test("returns 401 when internal auth key is missing", async () => {
+    const request = new Request(
+      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/report.json"
+    );
 
     const response = await handleGetReportRequest(request, {
       REPORTS_BUCKET: mockBucket as any,
+    });
+
+    expect(response.status).toBe(401);
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  test("returns 401 when internal auth header is wrong", async () => {
+    const request = new Request(
+      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/report.json",
+      { headers: { "X-Internal-Auth-Key": "wrong-key" } }
+    );
+
+    const response = await handleGetReportRequest(request, {
+      REPORTS_BUCKET: mockBucket as any,
+      INTERNAL_KEY_BINDING: "secret-123",
+    });
+
+    expect(response.status).toBe(401);
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  // --------------------------------------------------------------------------
+  // Test 7: Missing key parameter
+  // --------------------------------------------------------------------------
+  test("returns 400 when 'key' query parameter is missing", async () => {
+    const request = new Request("http://localhost/reports", {
+      headers: { "X-Internal-Auth-Key": "secret-123" },
+    });
+
+    const response = await handleGetReportRequest(request, {
+      REPORTS_BUCKET: mockBucket as any,
+      INTERNAL_KEY_BINDING: "secret-123",
     });
 
     expect(response.status).toBe(400);
@@ -263,9 +297,13 @@ describe("handleGetReportRequest", () => {
   // Test 7: REPORTS_BUCKET not configured
   // --------------------------------------------------------------------------
   test("returns 500 when REPORTS_BUCKET is not configured", async () => {
-    const request = new Request("http://localhost/reports?key=some-key");
+    const request = new Request("http://localhost/reports?key=some-key", {
+      headers: { "X-Internal-Auth-Key": "secret-123" },
+    });
 
-    const response = await handleGetReportRequest(request, {} as any);
+    const response = await handleGetReportRequest(request, {
+      INTERNAL_KEY_BINDING: "secret-123",
+    } as any);
 
     expect(response.status).toBe(500);
     const body = await response.text();
@@ -279,12 +317,14 @@ describe("handleGetReportRequest", () => {
   // --------------------------------------------------------------------------
   test("returns 404 when object is not found in R2", async () => {
     const request = new Request(
-      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/nonexistent.json"
+      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/nonexistent.json",
+      { headers: { "X-Internal-Auth-Key": "secret-123" } }
     );
 
     // mockGet already returns null by default
     const response = await handleGetReportRequest(request, {
       REPORTS_BUCKET: mockBucket as any,
+      INTERNAL_KEY_BINDING: "secret-123",
     });
 
     expect(response.status).toBe(404);
@@ -314,11 +354,13 @@ describe("handleGetReportRequest", () => {
     mockBucket.get = mockGet;
 
     const request = new Request(
-      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/report-123.json"
+      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/report-123.json",
+      { headers: { "X-Internal-Auth-Key": "secret-123" } }
     );
 
     const response = await handleGetReportRequest(request, {
       REPORTS_BUCKET: mockBucket as any,
+      INTERNAL_KEY_BINDING: "secret-123",
     });
 
     expect(response.status).toBe(200);
@@ -339,11 +381,13 @@ describe("handleGetReportRequest", () => {
     mockBucket.get = mockGet;
 
     const request = new Request(
-      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/report-etag-test.json"
+      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/report-etag-test.json",
+      { headers: { "X-Internal-Auth-Key": "secret-123" } }
     );
 
     const response = await handleGetReportRequest(request, {
       REPORTS_BUCKET: mockBucket as any,
+      INTERNAL_KEY_BINDING: "secret-123",
     });
 
     expect(response.status).toBe(200);
@@ -363,11 +407,13 @@ describe("handleGetReportRequest", () => {
     mockBucket.get = mockGet;
 
     const request = new Request(
-      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/error-report.json"
+      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/error-report.json",
+      { headers: { "X-Internal-Auth-Key": "secret-123" } }
     );
 
     const response = await handleGetReportRequest(request, {
       REPORTS_BUCKET: mockBucket as any,
+      INTERNAL_KEY_BINDING: "secret-123",
     });
 
     expect(response.status).toBe(500);
@@ -389,11 +435,13 @@ describe("handleGetReportRequest", () => {
     mockBucket.get = mockGet;
 
     const request = new Request(
-      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/rejected.json"
+      "http://localhost/reports?key=trade-reports/binance/BTCUSDT/rejected.json",
+      { headers: { "X-Internal-Auth-Key": "secret-123" } }
     );
 
     const response = await handleGetReportRequest(request, {
       REPORTS_BUCKET: mockBucket as any,
+      INTERNAL_KEY_BINDING: "secret-123",
     });
 
     expect(response.status).toBe(500);

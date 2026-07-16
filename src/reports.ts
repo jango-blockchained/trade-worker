@@ -1,5 +1,9 @@
 import type { WebhookPayload } from "@jango-blockchained/hoox-shared/types";
-import { createLogger } from "@jango-blockchained/hoox-shared/middleware";
+import {
+  createLogger,
+  requireInternalAuth,
+  type InternalAuthEnv,
+} from "@jango-blockchained/hoox-shared/middleware";
 import { toError } from "@jango-blockchained/hoox-shared/errors";
 
 const logger = createLogger({ service: "trade-worker", module: "reports" });
@@ -12,6 +16,7 @@ const logger = createLogger({ service: "trade-worker", module: "reports" });
  */
 export interface ReportsEnv {
   REPORTS_BUCKET?: R2Bucket;
+  INTERNAL_KEY_BINDING?: string;
 }
 
 // --- Report Functions ---
@@ -83,6 +88,15 @@ export async function handleGetReportRequest(
   request: Request,
   env: ReportsEnv
 ): Promise<Response> {
+  const authError = requireInternalAuth(
+    request,
+    env as InternalAuthEnv,
+    "INTERNAL_KEY_BINDING"
+  );
+  if (authError) {
+    return authError;
+  }
+
   const url = new URL(request.url);
   const key = url.searchParams.get("key");
 

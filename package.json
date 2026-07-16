@@ -2,7 +2,7 @@
   "name": "trade-worker",
   "version": "1.0.0",
   "description": "Trade execution service for cryptocurrency exchanges",
-  "license": "CC-BY-4.0",
+  "license": "Apache-2.0",
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
